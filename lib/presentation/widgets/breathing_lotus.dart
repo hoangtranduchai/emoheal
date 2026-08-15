@@ -1,12 +1,14 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../../core/theme.dart';
+
 
 class BreathingLotus extends StatefulWidget {
   const BreathingLotus({super.key});
 
   static const String imageUrl =
-      'https://www.figma.com/api/mcp/asset/88a4cf09-4520-4fe5-8101-dbf84bb9a4a1.png';
+      'assets/images/breathing_lotus.png';
 
   @override
   State<BreathingLotus> createState() => _BreathingLotusState();
@@ -55,13 +57,13 @@ class _BreathingLotusState extends State<BreathingLotus>
           borderRadius: BorderRadius.circular(28),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x66000000),
+              color: AppColors.black66,
               blurRadius: 40,
               offset: Offset(0, 18),
             ),
           ],
           image: const DecorationImage(
-            image: NetworkImage(BreathingLotus.imageUrl),
+            image: AssetImage(BreathingLotus.imageUrl),
             fit: BoxFit.cover,
           ),
         ),
@@ -75,10 +77,10 @@ class _BreathingLotusState extends State<BreathingLotus>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.transparent,
-                    Color(0x12000000),
-                    Color(0x7A000000),
-                    Color(0xFF08080A),
+                    AppColors.transparent,
+                    AppColors.black12,
+                    AppColors.black7A,
+                    AppColors.deepBlackDark,
                   ],
                   stops: [0.0, 0.55, 0.82, 1.0],
                 ),

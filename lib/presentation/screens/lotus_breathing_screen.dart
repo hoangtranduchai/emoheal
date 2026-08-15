@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+﻿import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -132,7 +132,7 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen> {
             top: 48,
             left: 16,
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.white),
               onPressed: () {
                 if (Navigator.of(context).canPop()) {
                   Navigator.of(context).pop();
@@ -147,3 +147,4 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen> {
     );
   }
 }
+

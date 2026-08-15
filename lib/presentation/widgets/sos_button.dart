@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/theme.dart';
+
 
 class SOSButton extends StatefulWidget {
   final double size;
@@ -110,7 +112,7 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                         height: widget.size,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFFF26842).withAlpha(77), // 0.3 * 255
+                          color: AppColors.sosOrangeLight2.withAlpha(77), // 0.3 * 255
                         ),
                       ),
                     ),
@@ -129,8 +131,8 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                   child: CircularProgressIndicator(
                     value: _progressAnimation.value,
                     strokeWidth: 16,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
-                    backgroundColor: Colors.transparent,
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.redAccent),
+                    backgroundColor: AppColors.transparent,
                   ),
                 );
               },
@@ -146,13 +148,13 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFFF9875F),
-                    Color(0xFFE94E23),
+                    AppColors.sosGradientStart,
+                    AppColors.sosGradientEnd,
                   ],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Color(0x66E94E23),
+                    color: AppColors.sosGradientEnd66,
                     blurRadius: 20,
                     spreadRadius: 2,
                     offset: Offset(0, 8),
@@ -166,7 +168,7 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                     fontFamily: 'Roboto',
                     fontSize: widget.size * 0.35,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.white,
                     letterSpacing: 2.0,
                   ),
                 ),

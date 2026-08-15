@@ -20,21 +20,21 @@ class _RadioScreenState extends State<RadioScreen> {
       title: 'Dân ca',
       subtitle: 'Bản nhạc mộc mạc, gần gũi',
       duration: '3 giờ 20 phút',
-      color: Color(0xFFF9D29E),
+      color: AppColors.golden,
       icon: Icons.music_note_rounded,
     ),
     _RadioCategory(
       title: 'Đờn ca tài tử',
       subtitle: 'Không gian hoài niệm nhẹ nhàng',
       duration: '2 giờ 05 phút',
-      color: Color(0xFF3C7232),
+      color: AppColors.primaryGreen,
       icon: Icons.library_music_rounded,
     ),
     _RadioCategory(
       title: 'Nhạc thư giãn',
       subtitle: 'Chậm rãi, ấm áp, bình yên',
       duration: '1 giờ 40 phút',
-      color: Color(0xFFA2A2A2),
+      color: AppColors.mediumGrey,
       icon: Icons.spa_rounded,
     ),
   ];
@@ -54,7 +54,7 @@ class _RadioScreenState extends State<RadioScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFF7F5F0), Color(0xFFEDEDED)],
+            colors: [AppColors.backgroundLight, AppColors.lightGrey],
           ),
         ),
         child: SafeArea(
@@ -190,11 +190,11 @@ class _PlayerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(28),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x12000000),
+            color: AppColors.black12,
             blurRadius: 24,
             offset: Offset(0, 12),
           ),
@@ -307,7 +307,7 @@ class _PlayerCard extends StatelessWidget {
                   label: Text(isPlaying ? 'Tạm dừng' : 'Phát nhạc'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryGreen,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
@@ -353,7 +353,7 @@ class _ControlButton extends StatelessWidget {
         ),
         child: Icon(
           icon,
-          color: isActive ? Colors.white : AppColors.primaryGreen,
+          color: isActive ? AppColors.white : AppColors.primaryGreen,
         ),
       ),
     );
@@ -371,11 +371,11 @@ class _CategoryCard extends StatelessWidget {
       width: 156,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(22),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0F000000),
+            color: AppColors.black0F,
             blurRadius: 18,
             offset: Offset(0, 10),
           ),
@@ -443,7 +443,7 @@ class _TrackTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.surfaceLight),
       ),

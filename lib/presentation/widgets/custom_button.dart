@@ -8,7 +8,7 @@ class CustomButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.backgroundColor = AppColors.primaryGreen,
-    this.foregroundColor = Colors.white,
+    this.foregroundColor = AppColors.white,
     this.height = 60,
   });
 
@@ -27,13 +27,13 @@ class CustomButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x33000000),
+            color: AppColors.black33,
             blurRadius: 24,
             offset: Offset(0, 12),
             spreadRadius: 0,
           ),
           BoxShadow(
-            color: Color(0x1AFFFFFF),
+            color: AppColors.white1A,
             blurRadius: 18,
             offset: Offset(0, -2),
           ),
@@ -45,7 +45,7 @@ class CustomButton extends StatelessWidget {
           backgroundColor: backgroundColor,
           foregroundColor: foregroundColor,
           elevation: 0,
-          shadowColor: Colors.transparent,
+          shadowColor: AppColors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),

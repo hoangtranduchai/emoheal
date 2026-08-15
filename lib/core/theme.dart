@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+
 /// Bảng màu ứng dụng LotusHaven — trích xuất trực tiếp từ Figma.
 ///
 /// Mỗi hằng số được đặt tên ngữ nghĩa theo vai trò sử dụng trong giao diện.
@@ -71,6 +72,33 @@ class AppColors {
 
   /// Màu đen thuần tuý.
   static const Color black = Color(0xFF000000);
+
+  /// Màu trong suốt.
+  static const Color transparent = Color(0x00000000);
+
+  // ─── Các màu mới thêm ────────────────────────────────────────────────
+  static const Color primaryGreenLight = Color(0xFF469D60);
+  static const Color golden = Color(0xFFF9D29E);
+  static const Color lightGrey = Color(0xFFEDEDED);
+  static const Color mediumGrey = Color(0xFFA2A2A2);
+  static const Color darkGrey = Color(0xFF636363);
+  static const Color deepBlack = Color(0xFF080709);
+  static const Color deepBlackDark = Color(0xFF08080A);
+  static const Color accentGreen = Color(0xFF72CE50);
+  static const Color sosOrangeLight2 = Color(0xFFF26842);
+  static const Color sosGradientStart = Color(0xFFF9875F);
+  static const Color sosGradientEnd = Color(0xFFE94E23);
+  static const Color redAccent = Color(0xFFFF5252);
+  
+  static const Color black12 = Color(0x12000000);
+  static const Color black0F = Color(0x0F000000);
+  static const Color black66 = Color(0x66000000);
+  static const Color black7A = Color(0x7A000000);
+  static const Color black33 = Color(0x33000000);
+  static const Color black1A = Color(0x1A000000);
+  static const Color white1A = Color(0x1AFFFFFF);
+  static const Color sosGradientEnd66 = Color(0x66E94E23);
+  static const Color transparentBlack = Color(0x00100F13);
 }
 
 /// Các hằng số kích thước chữ cũ

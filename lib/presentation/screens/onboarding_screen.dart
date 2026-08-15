@@ -8,7 +8,7 @@ class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
   static const String backgroundImageUrl =
-      'assets/images/onboarding_background.png';
+      'assets/images/onboarding_bg.png';
 
   @override
   Widget build(BuildContext context) {
@@ -58,15 +58,15 @@ class OnboardingScreen extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Color(0x00100F13), // Trong suốt
-                        Color(0xFF080709), // Đen
+                        AppColors.transparentBlack, // Trong suốt
+                        AppColors.deepBlack, // Đen
                       ],
                     ),
                   ),
                 ),
                 // Phần còn lại đổ full đen tuyền
                 Expanded(
-                  child: Container(color: const Color(0xFF080709)),
+                  child: Container(color: AppColors.deepBlack),
                 ),
               ],
             ),
@@ -86,7 +86,7 @@ class OnboardingScreen extends StatelessWidget {
                       fontFamily: 'Roboto',
                       fontSize: 32,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFFF9D29E), // Golden color from Figma
+                      color: AppColors.golden, // Golden color from Figma
                       letterSpacing: 0.16,
                       height: 1.3,
                     ),
@@ -99,7 +99,7 @@ class OnboardingScreen extends StatelessWidget {
                       fontFamily: 'Roboto',
                       fontSize: 18,
                       fontWeight: FontWeight.w400,
-                      color: Color(0xFFEDEDED),
+                      color: AppColors.lightGrey,
                       letterSpacing: 0.09,
                       height: 1.5,
                     ),

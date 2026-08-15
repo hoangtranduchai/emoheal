@@ -49,7 +49,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryGreen,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.white,
               ),
               child: const Text('Có'),
             ),
@@ -133,11 +133,11 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
                       width: 220,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppColors.white,
                         borderRadius: BorderRadius.circular(22),
                         boxShadow: const [
                           BoxShadow(
-                            color: Color(0x12000000),
+                            color: AppColors.black12,
                             blurRadius: 18,
                             offset: Offset(0, 10),
                           ),
@@ -212,7 +212,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
                     child: _ControlButton(
                       icon: Icons.delete_rounded,
                       label: 'Xóa',
-                      color: Colors.redAccent,
+                      color: AppColors.redAccent,
                       onTap: _confirmDelete,
                     ),
                   ),
@@ -251,11 +251,11 @@ class _RecordingStatusCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x12000000),
+            color: AppColors.black12,
             blurRadius: 18,
             offset: Offset(0, 10),
           ),
@@ -322,14 +322,14 @@ class _ControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(22),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.white,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: color.withValues(alpha: 0.18)),
           ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../core/theme.dart';
+
 
 /// Thẻ chức năng tái sử dụng cho màn hình Home.
 ///
@@ -33,12 +35,12 @@ class FeatureCard extends StatelessWidget {
       fontSize: 16,
       height: 1.3,
       fontWeight: FontWeight.w600,
-      color: Color(0xFF111111),
+      color: AppColors.textPrimary,
     );
 
     // Figma: icon color from gradient stop colors
     final iconColor =
-        isPrimary ? const Color(0xFF469D60) : const Color(0xFF636363);
+        isPrimary ? AppColors.primaryGreenLight : AppColors.darkGrey;
 
     return Container(
       decoration: BoxDecoration(
@@ -46,7 +48,7 @@ class FeatureCard extends StatelessWidget {
         // Shadow: Figma drop_shadow blur 15, offset(0,4), rgba(0,0,0,0.1)
         boxShadow: const [
           BoxShadow(
-            color: Color(0x1A000000), // 10% opacity
+            color: AppColors.black1A, // 10% opacity
             blurRadius: 15,
             spreadRadius: 0,
             offset: Offset(0, 4),
@@ -55,21 +57,21 @@ class FeatureCard extends StatelessWidget {
         // Outer container acts as the gradient/solid border
         gradient: isPrimary
             ? const LinearGradient(
-                colors: [Color(0xFF72CE50), Color(0xFF469D60)],
+                colors: [AppColors.accentGreen, AppColors.primaryGreenLight],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               )
             : null,
-        color: isPrimary ? null : const Color(0xFFA2A2A2),
+        color: isPrimary ? null : AppColors.mediumGrey,
       ),
       padding: const EdgeInsets.all(1), // Stroke width = 1px
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F5F0), // Figma fill #F7F5F0
+          color: AppColors.backgroundLight, // Figma fill #F7F5F0
           borderRadius: BorderRadius.circular(11),
         ),
         child: Material(
-          color: Colors.transparent,
+          color: AppColors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(11),
             onTap: onTap,

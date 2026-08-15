@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/theme.dart';
 import 'router.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: 'https://placeholder.supabase.co',
+    anonKey: 'placeholder_anon_key',
+  );
+  
   runApp(const LotusHavenApp());
 }
 

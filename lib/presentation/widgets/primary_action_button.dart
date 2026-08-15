@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/theme.dart';
+
 
 class PrimaryActionButton extends StatelessWidget {
   const PrimaryActionButton({
@@ -21,7 +23,7 @@ class PrimaryActionButton extends StatelessWidget {
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),

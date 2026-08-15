@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../router.dart';
 import '../widgets/feature_card.dart';
 import '../widgets/sos_button.dart';
+import '../../core/theme.dart';
+
 
 /// Màn hình Trang chủ — render 100% pixel-perfect theo Frame "Home" (421:1289) trên Figma.
 ///
@@ -26,7 +28,7 @@ class HomeScreen extends StatelessWidget {
     final sosSize = screenWidth * (isTablet ? 0.2 : 0.32);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F5F0), // Figma frame fill
+      backgroundColor: AppColors.backgroundLight, // Figma frame fill
       body: Stack(
         children: [
           // ── Main scrollable content ──
@@ -161,7 +163,7 @@ class _TopHeader extends StatelessWidget {
                 bottomRight: Radius.circular(24),
               ),
               child: Container(
-                color: const Color(0xFF26591D), // Figma: primaryGreenDark
+                color: AppColors.primaryGreenDark, // Figma: primaryGreenDark
               ),
             ),
           ),
@@ -199,7 +201,7 @@ class _TopHeader extends StatelessWidget {
                     fontWeight: FontWeight.w400,
                     height: 1.2,
                     letterSpacing: 0.24,
-                    color: Color(0xFFF9FBEB),
+                    color: AppColors.textOnDark,
                   ),
                 ),
                 Text(
@@ -209,7 +211,7 @@ class _TopHeader extends StatelessWidget {
                     fontSize: 48,
                     fontWeight: FontWeight.w600,
                     height: 1.2,
-                    color: Color(0xFFF9FBEB),
+                    color: AppColors.textOnDark,
                   ),
                 ),
               ],
@@ -251,7 +253,7 @@ class _SOSSection extends StatelessWidget {
             fontSize: 24,
             fontWeight: FontWeight.w600,
             height: 1.5,
-            color: Color(0xFF111111),
+            color: AppColors.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
@@ -263,7 +265,7 @@ class _SOSSection extends StatelessWidget {
             fontSize: 14,
             fontWeight: FontWeight.w400,
             height: 1.5,
-            color: Color(0x99111111), // 60% opacity
+            color: AppColors.textSecondary, // 60% opacity
           ),
         ),
         const SizedBox(height: 16),
@@ -277,7 +279,7 @@ class _SOSSection extends StatelessWidget {
             fontSize: 14,
             fontWeight: FontWeight.w400,
             height: 1.5,
-            color: Color(0x99111111),
+            color: AppColors.textSecondary,
           ),
         ),
       ],
@@ -301,10 +303,10 @@ class _AssistantBubble extends StatelessWidget {
         height: 64,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: const Color(0xFFE0F4C8), // Figma: assistantBubble
+          color: AppColors.assistantBubble, // Figma: assistantBubble
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF469D60).withValues(alpha: 0.3),
+              color: AppColors.primaryGreenLight.withValues(alpha: 0.3),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -312,7 +314,7 @@ class _AssistantBubble extends StatelessWidget {
         ),
         child: const Icon(
           Icons.headset_mic_rounded,
-          color: Color(0xFF3C7232),
+          color: AppColors.primaryGreen,
           size: 30,
         ),
       ),
