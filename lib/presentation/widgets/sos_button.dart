@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
@@ -46,8 +47,18 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
 
     _progressController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
+        HapticFeedback.heavyImpact();
         _makeEmergencyCall();
         _progressController.reset();
+      }
+    });
+
+    _progressController.addListener(() {
+      // Provide light haptic feedback occasionally while holding
+      if (_progressController.value > 0.0 &&
+          _progressController.value < 1.0 &&
+          (_progressController.value * 10).toInt() % 3 == 0) {
+        // Just an example, maybe better to just vibrate on start and end
       }
     });
   }
@@ -60,6 +71,7 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
   }
 
   void _onPointerDown() {
+    HapticFeedback.mediumImpact();
     _progressController.forward();
   }
 
