@@ -17,7 +17,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String voiceMemo = '/voice_memos';
   static const String history = '/history';
-  static const String lotusBreathing = '/lotus-breathing';
+  static const String lotusBreathing = '/lotus_breathing';
   static const String radio = '/radio';
   static const String settings = '/settings';
   static const String authWelcome = '/auth/welcome';

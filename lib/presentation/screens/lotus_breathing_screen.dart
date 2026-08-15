@@ -1,9 +1,7 @@
-﻿import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../core/theme.dart';
+import '../widgets/breathing_lotus.dart';
 
 class LotusBreathingScreen extends StatefulWidget {
   const LotusBreathingScreen({super.key});
@@ -12,31 +10,46 @@ class LotusBreathingScreen extends StatefulWidget {
   State<LotusBreathingScreen> createState() => _LotusBreathingScreenState();
 }
 
-class _LotusBreathingScreenState extends State<LotusBreathingScreen> {
-  late VideoPlayerController _controller;
+class _LotusBreathingScreenState extends State<LotusBreathingScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
   String _breathText = '';
-  
+
   @override
   void initState() {
     super.initState();
-    String videoAsset = 'assets/videos/lotus-flower-video-background-Android.mp4';
-    if (!kIsWeb && Platform.isIOS) {
-      videoAsset = 'assets/videos/lotus-flower-video-background-iOS.mp4';
-    }
-    
-    _controller = VideoPlayerController.asset(videoAsset)
-      ..initialize().then((_) {
-        _controller.setLooping(true);
-        _controller.play();
-        setState(() {});
-      });
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 16),
+    )..repeat();
+
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.965, end: 1.035)
+            .chain(CurveTween(curve: Curves.easeInOutSine)),
+        weight: 4,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.035),
+        weight: 4,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.035, end: 0.965)
+            .chain(CurveTween(curve: Curves.easeInOutSine)),
+        weight: 6,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(0.965),
+        weight: 2,
+      ),
+    ]).animate(_controller);
 
     _controller.addListener(_updateBreathText);
   }
 
   void _updateBreathText() {
-    final position = _controller.value.position.inMilliseconds;
-    final seconds = (position / 1000.0) % 16.0;
+    final seconds = _controller.value * 16.0;
     
     String newText = '';
     if (seconds < 4) {
@@ -70,17 +83,11 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (_controller.value.isInitialized)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller.value.size.width,
-                height: _controller.value.size.height,
-                child: VideoPlayer(_controller),
-              ),
-            )
-          else
-            const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen)),
+          Center(
+            child: BreathingLotus(
+              scaleAnimation: _scaleAnimation,
+            ),
+          ),
           
           SafeArea(
             child: Column(
@@ -98,7 +105,7 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
+                const Text(
                   'Chu kỳ thở 4 - 4 - 6',
                   textAlign: TextAlign.center,
                   style: TextStyle(

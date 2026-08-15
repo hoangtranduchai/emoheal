@@ -3,50 +3,23 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 
+class BreathingLotus extends StatelessWidget {
+  const BreathingLotus({
+    super.key,
+    required this.scaleAnimation,
+  });
 
-class BreathingLotus extends StatefulWidget {
-  const BreathingLotus({super.key});
+  final Animation<double> scaleAnimation;
 
-  static const String imageUrl =
-      'assets/images/breathing_lotus.png';
-
-  @override
-  State<BreathingLotus> createState() => _BreathingLotusState();
-}
-
-class _BreathingLotusState extends State<BreathingLotus>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 0.965, end: 1.035).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOutSine,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  static const String imageUrl = 'assets/images/breathing_lotus.png';
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _scale,
+      animation: scaleAnimation,
       builder: (context, child) {
         return Transform.scale(
-          scale: _scale.value,
+          scale: scaleAnimation.value,
           child: child,
         );
       },
@@ -63,7 +36,7 @@ class _BreathingLotusState extends State<BreathingLotus>
             ),
           ],
           image: const DecorationImage(
-            image: AssetImage(BreathingLotus.imageUrl),
+            image: AssetImage(imageUrl),
             fit: BoxFit.cover,
           ),
         ),
