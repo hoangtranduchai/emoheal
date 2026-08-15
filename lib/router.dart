@@ -10,6 +10,7 @@ import 'presentation/screens/voice_memo_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/otp_screen.dart';
 import 'presentation/screens/auth/welcome_screen.dart';
+import 'presentation/screens/chat_screen.dart';
 
 class AppRoutes {
   static const String onboarding = '/';
@@ -22,6 +23,7 @@ class AppRoutes {
   static const String authWelcome = '/auth/welcome';
   static const String authLogin = '/auth/login';
   static const String authOtp = '/auth/otp';
+  static const String chat = '/chat';
 }
 
 class AppRouter {
@@ -58,6 +60,9 @@ class AppRouter {
         break;
       case AppRoutes.authOtp:
         page = const OtpScreen();
+        break;
+      case AppRoutes.chat:
+        page = const ChatScreen();
         break;
       default:
         page = const OnboardingScreen();
