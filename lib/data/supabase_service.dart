@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Dịch vụ kết nối và thao tác dữ liệu với Supabase Backend.
@@ -7,9 +8,39 @@ class SupabaseService {
 
   SupabaseService() : _client = Supabase.instance.client;
 
-  // Lấy danh sách lịch sử hội thoại, ví dụ:
+  // Lấy danh sách lịch sử hội thoại từ bảng conversations
   Future<List<Map<String, dynamic>>> getChatHistory() async {
-    final response = await _client.from('chat_history').select();
+    final response = await _client.from('conversations').select().order('created_at', ascending: false);
     return response;
+  }
+
+  Future<String> uploadVoiceMemo(String filePath, String fileName) async {
+    final bytes = await File(filePath).readAsBytes();
+    await _client.storage.from('voice-memos').uploadBinary(fileName, bytes);
+    return _client.storage.from('voice-memos').getPublicUrl(fileName);
+  }
+
+  Future<void> saveVoiceMemoMetadata(String title, String fileUrl, int durationSeconds) async {
+    final user = _client.auth.currentUser;
+    await _client.from('voice_memos').insert({
+      if (user != null) 'user_id': user.id,
+      'title': title,
+      'file_url': fileUrl,
+      'duration_seconds': durationSeconds,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // Get messages from 'messages' table
+  Future<List<Map<String, dynamic>>> getMessages() async {
+    return await _client.from('messages').select().order('created_at', ascending: true);
+  }
+
+  // Insert a new message into 'messages' table
+  Future<void> saveMessage(String content, bool isUser) async {
+    await _client.from('messages').insert({
+      'content': content,
+      'is_user': isUser,
+    });
   }
 }
