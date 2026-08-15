@@ -14,7 +14,7 @@ import 'presentation/screens/auth/welcome_screen.dart';
 class AppRoutes {
   static const String onboarding = '/';
   static const String home = '/home';
-  static const String voiceMemo = '/voice-memo';
+  static const String voiceMemo = '/voice_memos';
   static const String history = '/history';
   static const String lotusBreathing = '/lotus-breathing';
   static const String radio = '/radio';
