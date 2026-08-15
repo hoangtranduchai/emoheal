@@ -110,7 +110,7 @@ class OnboardingScreen extends StatelessWidget {
                     height: 68,
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+                        Navigator.of(context).pushReplacementNamed(AppRoutes.authWelcome);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryGreen,

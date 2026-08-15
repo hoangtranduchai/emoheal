@@ -7,6 +7,9 @@ import 'presentation/screens/onboarding_screen.dart';
 import 'presentation/screens/radio_screen.dart';
 import 'presentation/screens/settings_screen.dart';
 import 'presentation/screens/voice_memo_screen.dart';
+import 'presentation/screens/auth/login_screen.dart';
+import 'presentation/screens/auth/otp_screen.dart';
+import 'presentation/screens/auth/welcome_screen.dart';
 
 class AppRoutes {
   static const String onboarding = '/';
@@ -16,6 +19,9 @@ class AppRoutes {
   static const String lotusBreathing = '/lotus-breathing';
   static const String radio = '/radio';
   static const String settings = '/settings';
+  static const String authWelcome = '/auth/welcome';
+  static const String authLogin = '/auth/login';
+  static const String authOtp = '/auth/otp';
 }
 
 class AppRouter {
@@ -43,6 +49,15 @@ class AppRouter {
         break;
       case AppRoutes.settings:
         page = const SettingsScreen();
+        break;
+      case AppRoutes.authWelcome:
+        page = const WelcomeScreen();
+        break;
+      case AppRoutes.authLogin:
+        page = const LoginScreen();
+        break;
+      case AppRoutes.authOtp:
+        page = const OtpScreen();
         break;
       default:
         page = const OnboardingScreen();
