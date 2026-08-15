@@ -1,0 +1,117 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
+/// Thẻ chức năng tái sử dụng cho màn hình Home.
+///
+/// Figma specs:
+/// - Fill: #F7F5F0 (backgroundLight)
+/// - Corner radius: 12
+/// - Primary stroke: LinearGradient from #72CE50 → #469D60 (top→bottom)
+/// - Secondary stroke: Solid #A2A2A2
+/// - Shadow: drop-shadow(0px 4px 15px rgba(0,0,0,0.1))
+class FeatureCard extends StatelessWidget {
+  final String title;
+  final String svgAsset;
+  final VoidCallback onTap;
+  final bool isHorizontal;
+  final bool isPrimary;
+
+  const FeatureCard({
+    super.key,
+    required this.title,
+    required this.svgAsset,
+    required this.onTap,
+    this.isHorizontal = false,
+    this.isPrimary = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Figma: text fill r:0.067 = #111111
+    const textStyle = TextStyle(
+      fontFamily: 'Roboto',
+      fontSize: 16,
+      height: 1.3,
+      fontWeight: FontWeight.w600,
+      color: Color(0xFF111111),
+    );
+
+    // Figma: icon color from gradient stop colors
+    final iconColor =
+        isPrimary ? const Color(0xFF469D60) : const Color(0xFF636363);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        // Shadow: Figma drop_shadow blur 15, offset(0,4), rgba(0,0,0,0.1)
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1A000000), // 10% opacity
+            blurRadius: 15,
+            spreadRadius: 0,
+            offset: Offset(0, 4),
+          ),
+        ],
+        // Outer container acts as the gradient/solid border
+        gradient: isPrimary
+            ? const LinearGradient(
+                colors: [Color(0xFF72CE50), Color(0xFF469D60)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              )
+            : null,
+        color: isPrimary ? null : const Color(0xFFA2A2A2),
+      ),
+      padding: const EdgeInsets.all(1), // Stroke width = 1px
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F5F0), // Figma fill #F7F5F0
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: isHorizontal
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          svgAsset,
+                          width: 40,
+                          height: 40,
+                          colorFilter: ColorFilter.mode(
+                              iconColor, BlendMode.srcIn),
+                        ),
+                        const SizedBox(width: 16),
+                        Text(title, style: textStyle),
+                      ],
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          svgAsset,
+                          width: 48,
+                          height: 48,
+                          colorFilter: ColorFilter.mode(
+                              iconColor, BlendMode.srcIn),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: textStyle,
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
