@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:lotus_haven/core/theme.dart';
 import 'package:lotus_haven/data/supabase_service.dart';
+import 'package:lotus_haven/data/api_service.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -13,6 +17,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final SupabaseService _supabaseService = SupabaseService();
   final ScrollController _scrollController = ScrollController();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isRecording = false;
   
   List<Map<String, dynamic>> _messages = [];
   bool _isLoading = true;
@@ -27,6 +34,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -70,8 +79,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       await _supabaseService.saveMessage(text, true);
-      // Giả lập AI phản hồi (có thể gọi hàm khác để lấy phản hồi từ AI)
-      _simulateAiResponse();
+      
+      final response = await ApiService.sendAssistantRequest(text: text);
+      final aiText = response['text'] ?? 'Xin lỗi, tôi không hiểu.';
+      final audioUrl = response['audio_url'];
+      
+      final aiMessage = {
+        'content': aiText,
+        'is_user': false,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      
+      await _supabaseService.saveMessage(aiText, false);
+      
+      if (mounted) {
+        setState(() {
+          _messages.add(aiMessage);
+        });
+        _scrollToBottom();
+      }
+
+      if (audioUrl != null && audioUrl.toString().isNotEmpty) {
+        await _audioPlayer.play(UrlSource(audioUrl));
+      }
+
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -81,24 +112,75 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _simulateAiResponse() async {
-    await Future.delayed(const Duration(seconds: 1));
-    final aiMessage = {
-      'content': 'Tôi đã nhận được tin nhắn của bạn.',
-      'is_user': false,
-      'created_at': DateTime.now().toIso8601String(),
-    };
-    
+  Future<void> _startRecording() async {
     try {
-      await _supabaseService.saveMessage(aiMessage['content'] as String, false);
+      if (await _audioRecorder.hasPermission()) {
+        final dir = await getApplicationDocumentsDirectory();
+        final path = '${dir.path}/chat_audio.m4a';
+        await _audioRecorder.start(const RecordConfig(), path: path);
+        setState(() {
+          _isRecording = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi ghi âm: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+      });
+      
+      if (path != null) {
+        await _sendAudioMessage(path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi gửi ghi âm: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendAudioMessage(String audioPath) async {
+    try {
+      final response = await ApiService.sendAssistantRequest(audioPath: audioPath);
+      final aiText = response['text'] ?? 'Xin lỗi, tôi không hiểu.';
+      final audioUrl = response['audio_url'];
+      
+      final aiMessage = {
+        'content': aiText,
+        'is_user': false,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      
+      await _supabaseService.saveMessage(aiText, false);
+      
       if (mounted) {
         setState(() {
           _messages.add(aiMessage);
         });
         _scrollToBottom();
       }
+
+      if (audioUrl != null && audioUrl.toString().isNotEmpty) {
+        await _audioPlayer.play(UrlSource(audioUrl));
+      }
+
     } catch (e) {
-      // Handle error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
     }
   }
 
@@ -195,16 +277,21 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () {
-              // TODO: Implement voice input
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Chức năng nhập bằng giọng nói đang phát triển.')),
-              );
-            },
-            icon: const Icon(Icons.mic, size: 32),
-            color: AppTheme.primary,
-            padding: const EdgeInsets.all(12), // Large touch target
+          GestureDetector(
+            onLongPressStart: (_) => _startRecording(),
+            onLongPressEnd: (_) => _stopRecording(),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _isRecording ? Colors.red.shade100 : Colors.transparent,
+              ),
+              child: Icon(
+                _isRecording ? Icons.mic : Icons.mic_none,
+                size: 32,
+                color: _isRecording ? Colors.red : AppTheme.primary,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
