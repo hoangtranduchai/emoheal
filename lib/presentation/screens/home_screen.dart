@@ -3,27 +3,22 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../router.dart';
 import '../widgets/feature_card.dart';
 import '../widgets/sos_button.dart';
+import '../widgets/emergency_contact_chip.dart';
+import '../widgets/add_contact_bottom_sheet.dart';
+import '../widgets/assistant_bubble.dart';
 import '../../core/theme.dart';
-
+import '../../core/responsive_utils.dart';
 
 /// Màn hình Trang chủ — render 100% pixel-perfect theo Frame "Home" (421:1289) trên Figma.
-///
-/// Layout (top → bottom):
-/// 1. Top Header Container (xanh đậm, bo góc 24, có ảnh + text "Kính chào / Bác")
-/// 2. SOS Section ("Bác đang cảm thấy bất an?" + nút SOS + "Nhấn và giữ trong 3 giây")
-/// 3. Feature Cards Row (Hồi ký Giọng nói + Góc bình yên)
-/// 4. Settings Card (Cài đặt & Hỗ trợ tiếp cận)
-/// 5. Floating Assistant Bubble (bottom-right)
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 600;
+    final isTablet = ResponsiveUtils.isTablet(context);
 
-    final horizontalPadding = isTablet ? 64.0 : 28.0;
-    final cardSpacing = isTablet ? 40.0 : 28.0;
+    final horizontalPadding = ResponsiveUtils.getCardPadding(context);
     final topHeaderHeight = isTablet ? 200.0 : 177.0;
     final sosSize = screenWidth * (isTablet ? 0.2 : 0.32);
 
@@ -35,6 +30,7 @@ class HomeScreen extends StatelessWidget {
           SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── 1. Top Header ──
                 _TopHeader(
@@ -45,65 +41,26 @@ class HomeScreen extends StatelessWidget {
                 // ── 2. SOS Section ──
                 Padding(
                   padding: EdgeInsets.fromLTRB(horizontalPadding, 32, horizontalPadding, 0),
-                  child: _SOSSection(sosSize: sosSize),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ── 3. Feature Cards ──
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: isTablet ? 180.0 : 145.5,
-                          child: FeatureCard(
-                            title: 'Hồi ký\nGiọng nói',
-                            svgAsset: 'assets/icons/microphone.svg',
-                            onTap: () => Navigator.of(context)
-                                .pushNamed(AppRoutes.voiceMemo),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: cardSpacing),
-                      Expanded(
-                        child: SizedBox(
-                          height: isTablet ? 180.0 : 145.5,
-                          child: FeatureCard(
-                            title: 'Góc bình yên',
-                            svgAsset: 'assets/icons/lotus.svg',
-                            onTap: () => Navigator.of(context)
-                                .pushNamed(AppRoutes.lotusBreathing),
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Center(
+                    child: _SOSSection(sosSize: sosSize),
                   ),
                 ),
 
-                const SizedBox(height: 18), // Figma gap ~18px
+                const SizedBox(height: 32),
 
-                // ── 4. Settings Card ──
+                // ── 3. Emergency Contacts ──
+                _EmergencyContactsSection(horizontalPadding: horizontalPadding),
+
+                const SizedBox(height: 32),
+
+                // ── 4. Feature Cards ──
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 95, // Figma: 94.63
-                    child: FeatureCard(
-                      title: 'Cài đặt & Hỗ trợ tiếp cận',
-                      svgAsset: 'assets/icons/setting.svg',
-                      isHorizontal: true,
-                      isPrimary: false,
-                      onTap: () => Navigator.of(context)
-                          .pushNamed(AppRoutes.settings),
-                    ),
-                  ),
+                  child: const _FeatureGrid(),
                 ),
 
                 // Bottom safe area padding
-                SizedBox(
-                    height: MediaQuery.of(context).padding.bottom + 16),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 100),
               ],
             ),
           ),
@@ -112,7 +69,7 @@ class HomeScreen extends StatelessWidget {
           Positioned(
             right: 16,
             bottom: MediaQuery.of(context).padding.bottom + 16,
-            child: _AssistantBubble(
+            child: AssistantBubble(
               onTap: () {
                 // TODO: Mở trợ lý AI
               },
@@ -129,8 +86,6 @@ class HomeScreen extends StatelessWidget {
 // ════════════════════════════════════════════════════════════════════
 
 /// Header xanh đậm ở trên cùng.
-/// Figma: Container (421:1367) fill #26591D.
-/// Bao gồm ảnh flagpole, star, ellipse, text "Kính chào" và "Bác".
 class _TopHeader extends StatelessWidget {
   const _TopHeader({
     required this.height,
@@ -172,18 +127,14 @@ class _TopHeader extends StatelessWidget {
           Positioned(
             bottom: 0,
             left: 0,
-            child: SvgPicture.asset(
-              'assets/icons/star.svg',
-            ),
+            child: SvgPicture.asset('assets/icons/star.svg'),
           ),
 
           // ── Ellipse (Bottom Right of Top Header) ──
           Positioned(
             bottom: 0,
             right: 0,
-            child: SvgPicture.asset(
-              'assets/icons/ellipse.svg',
-            ),
+            child: SvgPicture.asset('assets/icons/ellipse.svg'),
           ),
 
           // ── Text content ──
@@ -194,7 +145,7 @@ class _TopHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Kính chào',
+                  'Xin chào',
                   style: TextStyle(
                     fontFamily: 'Roboto',
                     fontSize: 24,
@@ -235,7 +186,6 @@ class _TopHeader extends StatelessWidget {
 }
 
 /// SOS Section: tiêu đề + mô tả + nút SOS + text nhấn giữ.
-/// Figma: Group "Nút hỗ trợ khẩn cấp" (2411:662), x=42, y=209, 291×265.
 class _SOSSection extends StatelessWidget {
   const _SOSSection({required this.sosSize});
 
@@ -287,37 +237,193 @@ class _SOSSection extends StatelessWidget {
   }
 }
 
-/// Nút trợ lý AI hình tròn, góc dưới bên phải.
-/// Figma: Group "Trợ lý" (2678:313), Ellipse 64×64, fill #E0F4C8 @ 20% opacity.
-class _AssistantBubble extends StatelessWidget {
-  const _AssistantBubble({required this.onTap});
+class _EmergencyContactsSection extends StatefulWidget {
+  final double horizontalPadding;
+  const _EmergencyContactsSection({required this.horizontalPadding});
 
-  final VoidCallback onTap;
+  @override
+  State<_EmergencyContactsSection> createState() => _EmergencyContactsSectionState();
+}
+
+class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
+  // Mock data for contacts
+  final List<Map<String, String>> _contacts = [
+    {'name': '115', 'initial': 'C'}
+  ];
+
+  void _showAddContactSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: AddContactBottomSheet(
+          onSave: () {
+            Navigator.pop(context);
+            // Implement saving logic here
+          },
+          onPickContact: () {
+            // Implement picking contact logic here
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.assistantBubble, // Figma: assistantBubble
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primaryGreenLight.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+          child: const Text(
+            'Liên hệ khẩn cấp',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 100, // appropriate height for EmergencyContactChip
+          child: ListView.separated(
+            padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+            scrollDirection: Axis.horizontal,
+            itemCount: _contacts.length + 1,
+            separatorBuilder: (context, index) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              if (index < _contacts.length) {
+                final contact = _contacts[index];
+                return EmergencyContactChip(
+                  name: contact['name']!,
+                  initial: contact['initial']!,
+                  onTap: () {
+                    // Implement tap logic
+                  },
+                  onLongPress: () {
+                    // Implement long press logic
+                  },
+                );
+              } else {
+                return _AddContactButton(onTap: _showAddContactSheet);
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddContactButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AddContactButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 120, minHeight: 80),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_circle_outline, color: AppColors.primaryGreen, size: 32),
+              SizedBox(height: 8),
+              Text(
+                'Thêm mới',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.primaryGreen,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeatureGrid extends StatelessWidget {
+  const _FeatureGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    final cardHeight = ResponsiveUtils.getCardSize(context);
+    final cardGap = ResponsiveUtils.getCardGap(context);
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: FeatureCard(
+                  title: 'Hồi ký\nGiọng nói',
+                  svgAsset: 'assets/icons/microphone.svg',
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.voiceMemo),
+                ),
+              ),
+            ),
+            SizedBox(width: cardGap),
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: FeatureCard(
+                  title: 'Nhịp thở',
+                  svgAsset: 'assets/icons/lotus.svg',
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.lotusBreathing),
+                ),
+              ),
             ),
           ],
         ),
-        child: const Icon(
-          Icons.headset_mic_rounded,
-          color: AppColors.primaryGreen,
-          size: 30,
+        SizedBox(height: cardGap),
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: FeatureCard(
+                  title: 'Đài Radio',
+                  svgAsset: 'assets/icons/soundwave-0.svg',
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.radio),
+                ),
+              ),
+            ),
+            SizedBox(width: cardGap),
+            Expanded(
+              child: SizedBox(
+                height: cardHeight,
+                child: FeatureCard(
+                  title: 'Cài đặt &\nHỗ trợ tiếp cận',
+                  svgAsset: 'assets/icons/setting.svg',
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.settings),
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
+      ],
     );
   }
 }
