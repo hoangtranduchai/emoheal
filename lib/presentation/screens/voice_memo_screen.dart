@@ -1,6 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../../core/theme.dart';
+import '../../data/supabase_service.dart';
 
 class VoiceMemoScreen extends StatefulWidget {
   const VoiceMemoScreen({super.key});
@@ -18,8 +24,36 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
     'Bác có muốn hít thở cùng cháu một chút không?',
   ];
 
+  final _audioRecorder = AudioRecorder();
+  final _supabaseService = SupabaseService();
+  
   bool _isRecording = false;
   bool _isPaused = false;
+  bool _isUploading = false;
+  
+  Timer? _timer;
+  int _recordDuration = 0;
+  String? _audioPath;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _audioRecorder.dispose();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (Timer t) {
+      setState(() => _recordDuration++);
+    });
+  }
+
+  String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
 
   Future<void> _confirmDelete() async {
     final shouldDelete = await showDialog<bool>(
@@ -59,27 +93,111 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
     );
 
     if (shouldDelete == true) {
+      if (_isRecording) {
+        await _audioRecorder.stop();
+      }
+      _timer?.cancel();
+      if (_audioPath != null) {
+        try {
+          final file = File(_audioPath!);
+          if (await file.exists()) await file.delete();
+        } catch (e) {
+          debugPrint('Error deleting file: $e');
+        }
+      }
       setState(() {
         _isRecording = false;
         _isPaused = false;
+        _recordDuration = 0;
+        _audioPath = null;
       });
     }
   }
 
-  void _toggleRecord() {
-    setState(() {
-      _isRecording = !_isRecording;
+  Future<void> _toggleRecord() async {
+    try {
       if (_isRecording) {
-        _isPaused = false;
+        final path = await _audioRecorder.stop();
+        _timer?.cancel();
+        setState(() {
+          _isRecording = false;
+          _isPaused = false;
+          _audioPath = path;
+        });
+      } else {
+        if (await _audioRecorder.hasPermission()) {
+          final dir = await getApplicationDocumentsDirectory();
+          final filePath = '${dir.path}/voice_memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          await _audioRecorder.start(const RecordConfig(), path: filePath);
+          setState(() {
+            _isRecording = true;
+            _isPaused = false;
+            _recordDuration = 0;
+            _audioPath = null;
+          });
+          _startTimer();
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Vui lòng cấp quyền ghi âm.')),
+            );
+          }
+        }
       }
-    });
+    } catch (e) {
+      debugPrint('Record error: $e');
+    }
   }
 
-  void _togglePause() {
+  Future<void> _togglePause() async {
     if (!_isRecording) return;
-    setState(() {
-      _isPaused = !_isPaused;
-    });
+    try {
+      if (_isPaused) {
+        await _audioRecorder.resume();
+        _startTimer();
+        setState(() => _isPaused = false);
+      } else {
+        await _audioRecorder.pause();
+        _timer?.cancel();
+        setState(() => _isPaused = true);
+      }
+    } catch (e) {
+      debugPrint('Pause error: $e');
+    }
+  }
+
+  Future<void> _uploadVoiceMemo() async {
+    if (_audioPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa có bản ghi âm nào để gửi.')),
+      );
+      return;
+    }
+    
+    setState(() => _isUploading = true);
+    try {
+      final fileName = 'memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final fileUrl = await _supabaseService.uploadVoiceMemo(_audioPath!, fileName);
+      await _supabaseService.saveVoiceMemoMetadata('Hồi ký giọng nói', fileUrl, _recordDuration);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã gửi hồi ký thành công!')),
+        );
+        setState(() {
+          _audioPath = null;
+          _recordDuration = 0;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
   }
 
   @override
@@ -182,25 +300,27 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
               _RecordingStatusCard(
                 isRecording: _isRecording,
                 isPaused: _isPaused,
+                durationFormatted: _formatDuration(_recordDuration),
+                hasRecorded: _audioPath != null,
               ),
               const SizedBox(height: 18),
               Row(
                 children: [
                   Expanded(
                     child: _ControlButton(
-                      icon: _isRecording ? Icons.mic_off_rounded : Icons.mic_rounded,
+                      icon: _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
                       label: _isRecording ? 'Dừng' : 'Ghi âm',
-                      color: AppColors.primaryGreen,
-                      onTap: _toggleRecord,
+                      color: _isRecording ? AppColors.warningOrange : AppColors.primaryGreen,
+                      onTap: _isUploading ? () {} : _toggleRecord,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _ControlButton(
-                      icon: Icons.pause_rounded,
-                      label: 'Tạm dừng',
-                      color: _isPaused ? AppColors.warningOrange : AppColors.ink,
-                      onTap: _togglePause,
+                      icon: _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                      label: _isPaused ? 'Tiếp tục' : 'Tạm dừng',
+                      color: _isPaused ? AppColors.primaryGreen : AppColors.ink,
+                      onTap: (_isUploading || (!_isRecording && _audioPath == null)) ? () {} : _togglePause,
                     ),
                   ),
                 ],
@@ -213,16 +333,16 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
                       icon: Icons.delete_rounded,
                       label: 'Xóa',
                       color: AppColors.redAccent,
-                      onTap: _confirmDelete,
+                      onTap: _isUploading ? () {} : _confirmDelete,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _ControlButton(
-                      icon: Icons.send_rounded,
-                      label: 'Gửi',
+                      icon: _isUploading ? Icons.hourglass_empty_rounded : Icons.send_rounded,
+                      label: _isUploading ? 'Đang gửi...' : 'Gửi',
                       color: AppColors.warningOrange,
-                      onTap: () {},
+                      onTap: (_isUploading || _audioPath == null) ? () {} : _uploadVoiceMemo,
                     ),
                   ),
                 ],
@@ -236,16 +356,26 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen> {
 }
 
 class _RecordingStatusCard extends StatelessWidget {
-  const _RecordingStatusCard({required this.isRecording, required this.isPaused});
+  const _RecordingStatusCard({
+    required this.isRecording, 
+    required this.isPaused,
+    required this.durationFormatted,
+    required this.hasRecorded,
+  });
 
   final bool isRecording;
   final bool isPaused;
+  final String durationFormatted;
+  final bool hasRecorded;
 
   @override
   Widget build(BuildContext context) {
-    final title = isRecording
-        ? (isPaused ? 'Đang tạm dừng' : 'Đang ghi âm')
-        : 'Chưa bắt đầu ghi âm';
+    String title = 'Chưa bắt đầu ghi âm';
+    if (isRecording) {
+      title = isPaused ? 'Đang tạm dừng' : 'Đang ghi âm';
+    } else if (hasRecorded) {
+      title = 'Bản ghi âm đã sẵn sàng';
+    }
 
     return Container(
       width: double.infinity,
@@ -272,7 +402,7 @@ class _RecordingStatusCard extends StatelessWidget {
                   .withValues(alpha: 0.12),
             ),
             child: Icon(
-              isRecording ? Icons.graphic_eq_rounded : Icons.mic_none_rounded,
+              isRecording ? Icons.graphic_eq_rounded : (hasRecorded ? Icons.check_rounded : Icons.mic_none_rounded),
               color: isRecording ? AppColors.primaryGreen : AppColors.warningOrange,
               size: 34,
             ),
@@ -288,18 +418,27 @@ class _RecordingStatusCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            isPaused
-                ? 'Bác có thể bấm tiếp tục khi sẵn sàng.'
-                : 'Giữ nhịp thật chậm, cháu sẽ lắng nghe.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 13,
-              height: 1.4,
-              color: AppColors.neutralGrey,
+          if (isRecording || hasRecorded)
+            Text(
+              durationFormatted,
+              style: const TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryGreen,
+              ),
             ),
-          ),
+          if (!isRecording && !hasRecorded)
+            const Text(
+              'Giữ nhịp thật chậm, cháu sẽ lắng nghe.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.neutralGrey,
+              ),
+            ),
         ],
       ),
     );
