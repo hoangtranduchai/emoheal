@@ -43,4 +43,36 @@ class SupabaseService {
       'is_user': isUser,
     });
   }
+
+  // Lấy cài đặt của người dùng
+  Future<Map<String, dynamic>?> getUserSettings() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    final response = await _client
+        .from('user_settings')
+        .select()
+        .eq('user_id', user.id)
+        .maybeSingle();
+    return response;
+  }
+
+  // Lưu cài đặt của người dùng
+  Future<void> saveUserSettings({
+    required bool soundEnabled,
+    required bool highContrastEnabled,
+    required bool antiMistapEnabled,
+    required String voiceType,
+  }) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    
+    await _client.from('user_settings').upsert({
+      'user_id': user.id,
+      'sound_enabled': soundEnabled,
+      'high_contrast_enabled': highContrastEnabled,
+      'anti_mistap_enabled': antiMistapEnabled,
+      'voice_type': voiceType,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+  }
 }
