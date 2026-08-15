@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Dịch vụ kết nối và thao tác dữ liệu với Supabase Backend.
@@ -14,11 +15,20 @@ class SupabaseService {
   }
 
   Future<String> uploadVoiceMemo(String filePath, String fileName) async {
-    final file = await _client.storage.from('voice-memos').upload(
-          fileName,
-          // ignore: undefined_identifier
-          java.io.File(filePath), // Actually wait, I need to import dart:io
-        ); // Wait, this is better done with write_to_file completely or replace with dart:io import
+    final bytes = await File(filePath).readAsBytes();
+    await _client.storage.from('voice-memos').uploadBinary(fileName, bytes);
+    return _client.storage.from('voice-memos').getPublicUrl(fileName);
+  }
+
+  Future<void> saveVoiceMemoMetadata(String title, String fileUrl, int durationSeconds) async {
+    final user = _client.auth.currentUser;
+    await _client.from('voice_memos').insert({
+      if (user != null) 'user_id': user.id,
+      'title': title,
+      'file_url': fileUrl,
+      'duration_seconds': durationSeconds,
+      'created_at': DateTime.now().toIso8601String(),
+    });
   }
 
   // Get messages from 'messages' table
