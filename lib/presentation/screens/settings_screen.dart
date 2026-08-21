@@ -138,10 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildVoiceOption(
-                  title: 'Hoài My',
-                  subtitle: 'Giọng nữ nhẹ nhàng',
-                  value: 'hoai_my',
+                RadioGroup<String>(
                   groupValue: _voiceType,
                   onChanged: (val) {
                     if (val != null) {
@@ -149,23 +146,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _onSettingChanged();
                     }
                   },
-                  textColor: textColor,
-                  cardColor: cardColor,
-                ),
-                const SizedBox(height: 12),
-                _buildVoiceOption(
-                  title: 'Nam Minh',
-                  subtitle: 'Giọng nam trầm ấm',
-                  value: 'nam_minh',
-                  groupValue: _voiceType,
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _voiceType = val);
-                      _onSettingChanged();
-                    }
-                  },
-                  textColor: textColor,
-                  cardColor: cardColor,
+                  child: Column(
+                    children: [
+                      _buildVoiceOption(
+                        title: 'Hoài My',
+                        subtitle: 'Giọng nữ nhẹ nhàng',
+                        value: 'hoai_my',
+                        isSelected: _voiceType == 'hoai_my',
+                        onTap: () {
+                          setState(() => _voiceType = 'hoai_my');
+                          _onSettingChanged();
+                        },
+                        textColor: textColor,
+                        cardColor: cardColor,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildVoiceOption(
+                        title: 'Nam Minh',
+                        subtitle: 'Giọng nam trầm ấm',
+                        value: 'nam_minh',
+                        isSelected: _voiceType == 'nam_minh',
+                        onTap: () {
+                          setState(() => _voiceType = 'nam_minh');
+                          _onSettingChanged();
+                        },
+                        textColor: textColor,
+                        cardColor: cardColor,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -225,14 +234,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String title,
     required String subtitle,
     required String value,
-    required String groupValue,
-    required ValueChanged<String?> onChanged,
+    required bool isSelected,
+    required VoidCallback onTap,
     Color? textColor,
     Color? cardColor,
   }) {
-    final isSelected = value == groupValue;
     return GestureDetector(
-      onTap: () => onChanged(value),
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         decoration: BoxDecoration(
@@ -246,8 +254,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Radio<String>(
               value: value,
-              groupValue: groupValue,
-              onChanged: onChanged,
               activeColor: Colors.teal,
             ),
             const SizedBox(width: 12),
