@@ -36,7 +36,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.surfaceLight,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.ink),
@@ -83,7 +83,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       return Center(
                         child: Text(
                           'Có lỗi xảy ra: ${snapshot.error}',
-                          style: const TextStyle(color: AppColors.error),
+                          style: const TextStyle(color: AppColors.redAccent),
                         ),
                       );
                     }

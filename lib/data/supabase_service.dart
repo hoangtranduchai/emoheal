@@ -75,4 +75,33 @@ class SupabaseService {
       'updated_at': DateTime.now().toIso8601String(),
     });
   }
+  // Lấy danh sách liên hệ khẩn cấp
+  Future<List<Map<String, dynamic>>> getEmergencyContacts() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return [];
+    return await _client
+        .from('emergency_contacts')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at', ascending: true);
+  }
+
+  // Thêm liên hệ khẩn cấp
+  Future<void> addEmergencyContact(String name, String phone) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    await _client.from('emergency_contacts').insert({
+      'user_id': user.id,
+      'name': name,
+      'phone_number': phone,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // Xóa liên hệ khẩn cấp
+  Future<void> deleteEmergencyContact(String id) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    await _client.from('emergency_contacts').delete().match({'id': id, 'user_id': user.id});
+  }
 }

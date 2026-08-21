@@ -98,10 +98,10 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _onPointerDown(),
-      onTapUp: (_) => _onPointerUp(),
-      onTapCancel: () => _onPointerCancel(),
+    return Listener(
+      onPointerDown: (_) => _onPointerDown(),
+      onPointerUp: (_) => _onPointerUp(),
+      onPointerCancel: (_) => _onPointerCancel(),
       child: SizedBox(
         width: widget.size * 1.5,
         height: widget.size * 1.5,

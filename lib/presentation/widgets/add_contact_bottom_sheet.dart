@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 
-class AddContactBottomSheet extends StatelessWidget {
-  final VoidCallback onSave;
+class AddContactBottomSheet extends StatefulWidget {
+  final Function(String name, String phone) onSave;
   final VoidCallback onPickContact;
 
   const AddContactBottomSheet({
@@ -10,6 +10,21 @@ class AddContactBottomSheet extends StatelessWidget {
     required this.onSave,
     required this.onPickContact,
   });
+
+  @override
+  State<AddContactBottomSheet> createState() => _AddContactBottomSheetState();
+}
+
+class _AddContactBottomSheetState extends State<AddContactBottomSheet> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +65,7 @@ class AddContactBottomSheet extends StatelessWidget {
           SizedBox(
             height: 56,
             child: TextField(
+              controller: _nameController,
               decoration: InputDecoration(
                 labelText: 'Tên liên hệ',
                 hintText: 'VD: Con gái, Bác Năm...',
@@ -71,6 +87,7 @@ class AddContactBottomSheet extends StatelessWidget {
           SizedBox(
             height: 56,
             child: TextField(
+              controller: _phoneController,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
                 labelText: 'Số điện thoại',
@@ -91,7 +108,7 @@ class AddContactBottomSheet extends StatelessWidget {
 
           // Pick from contacts
           OutlinedButton.icon(
-            onPressed: onPickContact,
+            onPressed: widget.onPickContact,
             icon: const Icon(Icons.contact_phone, color: AppColors.primaryGreen),
             label: const Text(
               '📒 Chọn từ danh bạ',
@@ -109,7 +126,11 @@ class AddContactBottomSheet extends StatelessWidget {
 
           // Save button
           ElevatedButton(
-            onPressed: onSave,
+            onPressed: () {
+              if (_nameController.text.isNotEmpty && _phoneController.text.isNotEmpty) {
+                widget.onSave(_nameController.text, _phoneController.text);
+              }
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryGreen,
               padding: const EdgeInsets.symmetric(vertical: 16),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/supabase_service.dart';
+import '../../core/theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -71,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Zero-Barrier UI approach: big text, clear contrast, large tap targets
     final theme = Theme.of(context);
     final bgColor = _highContrastEnabled ? Colors.black : theme.scaffoldBackgroundColor;
-    final textColor = _highContrastEnabled ? Colors.white : theme.textTheme.bodyLarge?.color;
+    final textColor = _highContrastEnabled ? AppColors.white : theme.textTheme.bodyLarge?.color;
     final cardColor = _highContrastEnabled ? Colors.grey[900] : theme.cardColor;
 
     return Scaffold(
@@ -185,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -208,14 +209,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle,
                   style: TextStyle(
                     fontSize: 18,
-                    color: textColor?.withOpacity(0.7),
+                    color: textColor?.withValues(alpha: 0.7),
                   ),
                 ),
               )
             : null,
         value: value,
         onChanged: onChanged,
-        activeColor: Colors.teal,
+        activeThumbColor: Colors.teal,
       ),
     );
   }
@@ -235,11 +236,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.teal.withOpacity(0.1) : cardColor,
+          color: isSelected ? Colors.teal.withValues(alpha: 0.1) : cardColor,
           borderRadius: BorderRadius.circular(16),
           border: isSelected
               ? Border.all(color: Colors.teal, width: 2)
-              : Border.all(color: Colors.transparent, width: 2),
+              : Border.all(color: AppColors.transparent, width: 2),
         ),
         child: Row(
           children: [
@@ -267,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 18,
-                      color: textColor?.withOpacity(0.7),
+                      color: textColor?.withValues(alpha: 0.7),
                     ),
                   ),
                 ],

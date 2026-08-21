@@ -9,7 +9,7 @@ void main() async {
   
   await Supabase.initialize(
     url: 'https://placeholder.supabase.co',
-    anonKey: 'placeholder_anon_key',
+    publishableKey: 'placeholder_anon_key',
   );
   
   runApp(const LotusHavenApp());

@@ -8,6 +8,8 @@ import '../widgets/add_contact_bottom_sheet.dart';
 import '../widgets/assistant_bubble.dart';
 import '../../core/theme.dart';
 import '../../core/responsive_utils.dart';
+import '../../data/supabase_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Màn hình Trang chủ — render 100% pixel-perfect theo Frame "Home" (421:1289) trên Figma.
 class HomeScreen extends StatelessWidget {
@@ -60,7 +62,7 @@ class HomeScreen extends StatelessWidget {
                 ),
 
                 // Bottom safe area padding
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 100),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 160),
               ],
             ),
           ),
@@ -246,29 +248,77 @@ class _EmergencyContactsSection extends StatefulWidget {
 }
 
 class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
-  // Mock data for contacts
-  final List<Map<String, String>> _contacts = [
-    {'name': '115', 'initial': 'C'}
-  ];
+  final _supabaseService = SupabaseService();
+  List<Map<String, dynamic>> _contacts = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContacts();
+  }
+
+  Future<void> _loadContacts() async {
+    setState(() => _isLoading = true);
+    try {
+      final contacts = await _supabaseService.getEmergencyContacts();
+      if (mounted) {
+        setState(() {
+          _contacts = contacts;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   void _showAddContactSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (context) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: AddContactBottomSheet(
-          onSave: () {
+          onSave: (name, phone) async {
             Navigator.pop(context);
-            // Implement saving logic here
+            await _supabaseService.addEmergencyContact(name, phone);
+            _loadContacts();
           },
           onPickContact: () {
-            // Implement picking contact logic here
+            // Not implemented for web/desktop usually, but placeholder
           },
         ),
       ),
     );
+  }
+
+  Future<void> _deleteContact(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa liên hệ'),
+        content: const Text('Bạn có chắc chắn muốn xóa liên hệ này?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm == true) {
+      await _supabaseService.deleteEmergencyContact(id);
+      _loadContacts();
+    }
   }
 
   @override
@@ -290,24 +340,37 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 100, // appropriate height for EmergencyContactChip
-          child: ListView.separated(
+          height: 100,
+          child: _isLoading 
+            ? const Center(child: CircularProgressIndicator())
+            : ListView.separated(
             padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
             scrollDirection: Axis.horizontal,
-            itemCount: _contacts.length + 1,
+            itemCount: _contacts.length + 2, // 115 default + DB contacts + add button
             separatorBuilder: (context, index) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
-              if (index < _contacts.length) {
-                final contact = _contacts[index];
+              if (index == 0) {
                 return EmergencyContactChip(
-                  name: contact['name']!,
-                  initial: contact['initial']!,
+                  name: '115',
+                  initial: 'C',
                   onTap: () {
-                    // Implement tap logic
+                    launchUrl(Uri.parse('tel:115'));
                   },
-                  onLongPress: () {
-                    // Implement long press logic
+                  onLongPress: () {},
+                );
+              } else if (index <= _contacts.length) {
+                final contact = _contacts[index - 1];
+                final name = contact['name'] as String;
+                final phone = contact['phone_number'] as String;
+                final initial = name.isNotEmpty ? name[0].toUpperCase() : 'C';
+                
+                return EmergencyContactChip(
+                  name: name,
+                  initial: initial,
+                  onTap: () {
+                    launchUrl(Uri.parse('tel:$phone'));
                   },
+                  onLongPress: () => _deleteContact(contact['id'] as String),
                 );
               } else {
                 return _AddContactButton(onTap: _showAddContactSheet);
