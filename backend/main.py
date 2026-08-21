@@ -3,7 +3,7 @@ import shutil
 import uuid
 import glob
 import time
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from services.stt_service import transcribe_audio
 from services.ai_service import get_assistant_response
 from services.tts_service import generate_speech
+from auth import get_current_user
 
 load_dotenv()
 
@@ -45,6 +46,7 @@ def health_check():
 async def assistant(
     audio: UploadFile | None = File(None),
     text: str | None = Form(None),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Accept audio OR text (or both). If audio is provided, transcribe first.
@@ -68,17 +70,19 @@ async def assistant(
             return {"intent": "error", "text": "Vui lòng gửi tin nhắn hoặc ghi âm.", "audio_url": None}
 
         # Step 2: AI response / Bước 2: Trả lời AI
-        ai_response_text = get_assistant_response(transcribed_text)
+        ai_response = get_assistant_response(transcribed_text)
+        ai_text = ai_response["text"]
 
         # Step 3: TTS / Bước 3: Chuyển chữ thành giọng nói
         output_audio_path = f"static/resp_{uuid.uuid4().hex}.mp3"
-        await generate_speech(ai_response_text, output_audio_path)
+        await generate_speech(ai_text, output_audio_path)
 
         audio_url = f"/{output_audio_path}"
 
         return {
-            "intent": "chat",
-            "text": ai_response_text,
+            "intent": ai_response["intent"],
+            "text": ai_text,
+            "target": ai_response.get("target"),
             "audio_url": audio_url,
         }
     except Exception as e:
@@ -88,15 +92,17 @@ async def assistant(
             os.remove(temp_audio_path)
 
 @app.post("/api/assistant/text")
-async def assistant_text(text: str = Form(...)):
+async def assistant_text(text: str = Form(...), current_user: dict = Depends(get_current_user)):
     """Text-only assistant endpoint / Endpoint trợ lý chỉ nhận text"""
     try:
-        ai_response_text = get_assistant_response(text)
+        ai_response = get_assistant_response(text)
+        ai_text = ai_response["text"]
         output_audio_path = f"static/resp_{uuid.uuid4().hex}.mp3"
-        await generate_speech(ai_response_text, output_audio_path)
+        await generate_speech(ai_text, output_audio_path)
         return {
-            "intent": "chat",
-            "text": ai_response_text,
+            "intent": ai_response["intent"],
+            "text": ai_text,
+            "target": ai_response.get("target"),
             "audio_url": f"/{output_audio_path}",
         }
     except Exception as e:

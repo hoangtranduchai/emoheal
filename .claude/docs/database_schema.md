@@ -69,6 +69,16 @@ erDiagram
         boolean is_active
         int sort_order
     }
+    
+    PROFILES ||--o{ EMERGENCY_CONTACTS : "1-N (max 5)"
+    EMERGENCY_CONTACTS {
+        uuid id PK
+        uuid user_id FK
+        text contact_name
+        text contact_phone
+        int sort_order
+        timestamptz created_at
+    }
 ```
 
 ## SQL Table Definitions
@@ -146,6 +156,33 @@ CREATE TABLE public.user_settings (
     anti_mis_tap BOOLEAN DEFAULT false,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+```
+
+### 7. `emergency_contacts`
+```sql
+CREATE TABLE public.emergency_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    contact_name TEXT NOT NULL,
+    contact_phone TEXT NOT NULL,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Max 5 contacts per user / Giới hạn 5 liên hệ khẩn cấp
+CREATE OR REPLACE FUNCTION public.enforce_max_emergency_contacts()
+RETURNS trigger AS $$
+BEGIN
+  IF (SELECT COUNT(*) FROM public.emergency_contacts WHERE user_id = NEW.user_id) >= 5 THEN
+    RAISE EXCEPTION 'Bác chỉ có thể lưu tối đa 5 liên hệ khẩn cấp.';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_max_emergency_contacts
+  BEFORE INSERT ON public.emergency_contacts
+  FOR EACH ROW EXECUTE PROCEDURE public.enforce_max_emergency_contacts();
 ```
 
 ## Indexes for Performance
