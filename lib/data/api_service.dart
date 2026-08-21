@@ -3,8 +3,11 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApiService {
-  // Thay đổi host tùy thuộc vào môi trường (emulator: 10.0.2.2, máy thật: IP LAN)
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  // Backend URL — set via --dart-define=BACKEND_URL=... / Cấu hình URL backend
+  static const String baseUrl = String.fromEnvironment(
+    'BACKEND_URL',
+    defaultValue: 'http://localhost:8000',
+  );
 
   static Future<Map<String, dynamic>> sendAssistantRequest({
     String? text,
