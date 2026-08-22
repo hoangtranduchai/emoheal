@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:lotus_haven/core/theme.dart';
 import 'package:lotus_haven/data/supabase_service.dart';
 import 'package:lotus_haven/data/api_service.dart';
+import 'package:lotus_haven/router.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -19,7 +20,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
+  
   bool _isRecording = false;
+  bool _isSending = false;
+  String? _conversationId;
   
   List<Map<String, dynamic>> _messages = [];
   bool _isLoading = true;
@@ -27,7 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    _initConversation();
   }
 
   @override
@@ -39,36 +43,61 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _loadMessages() async {
+  Future<void> _initConversation() async {
     try {
-      final messages = await _supabaseService.getMessages();
-      setState(() {
-        _messages = List<Map<String, dynamic>>.from(messages);
-        _isLoading = false;
-      });
-      _scrollToBottom();
+      final history = await _supabaseService.getChatHistory();
+      if (history.isNotEmpty) {
+        _conversationId = history.first['id'] as String;
+      } else {
+        final newConv = await _supabaseService.createConversation();
+        _conversationId = newConv['id'] as String;
+      }
+      await _loadMessages();
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tải tin nhắn: $e')),
-        );
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMessages() async {
+    if (_conversationId == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    try {
+      final messages = await _supabaseService.getMessages(_conversationId!);
+      if (mounted) {
+        setState(() {
+          _messages = List<Map<String, dynamic>>.from(messages);
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isSending) return;
 
     _messageController.clear();
+    setState(() => _isSending = true);
+
+    // Đảm bảo có conversation_id
+    if (_conversationId == null) {
+      final newConv = await _supabaseService.createConversation();
+      _conversationId = newConv['id'] as String;
+    }
     
-    // Optimistic UI update
+    // Hiển thị lạc quan (Optimistic UI update)
     final newMessage = {
       'content': text,
-      'is_user': true,
+      'sender': 'user',
       'created_at': DateTime.now().toIso8601String(),
     };
     
@@ -78,19 +107,30 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     try {
-      await _supabaseService.saveMessage(text, true);
+      await _supabaseService.saveMessage(
+        conversationId: _conversationId!,
+        sender: 'user',
+        content: text,
+      );
       
       final response = await ApiService.sendAssistantRequest(text: text);
-      final aiText = response['text'] ?? 'Xin lỗi, tôi không hiểu.';
-      final audioUrl = response['audio_url'];
+      final aiText = response['text'] ?? 'Cháu chào Bác, Bác cần cháu hỗ trợ thêm gì ạ?';
+      final audioUrl = response['audio_url'] as String?;
+      final intent = response['intent'] as String?;
+      final target = response['target'] as String?;
       
       final aiMessage = {
         'content': aiText,
-        'is_user': false,
+        'sender': 'assistant',
         'created_at': DateTime.now().toIso8601String(),
       };
       
-      await _supabaseService.saveMessage(aiText, false);
+      await _supabaseService.saveMessage(
+        conversationId: _conversationId!,
+        sender: 'assistant',
+        content: aiText,
+        audioUrl: audioUrl,
+      );
       
       if (mounted) {
         setState(() {
@@ -99,8 +139,24 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       }
 
-      if (audioUrl != null && audioUrl.toString().isNotEmpty) {
-        await _audioPlayer.play(UrlSource(audioUrl));
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        final fullAudioUrl = audioUrl.startsWith('http') 
+            ? audioUrl 
+            : '${ApiService.baseUrl}$audioUrl';
+        try {
+          await _audioPlayer.play(UrlSource(fullAudioUrl));
+        } catch (e) {
+          debugPrint('Lỗi phát âm thanh: $e');
+        }
+      }
+
+      // Xử lý Intent điều hướng nếu Bác yêu cầu
+      if (mounted) {
+        if (intent == 'PANIC' || target == 'breathing') {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) Navigator.of(context).pushNamed(AppRoutes.lotusBreathing);
+          });
+        }
       }
 
     } catch (e) {
@@ -109,25 +165,34 @@ class _ChatScreenState extends State<ChatScreen> {
           SnackBar(content: Text('Lỗi gửi tin nhắn: $e')),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
     }
   }
 
   Future<void> _startRecording() async {
     try {
       if (await _audioRecorder.hasPermission()) {
-        final dir = await getApplicationDocumentsDirectory();
-        final path = '${dir.path}/chat_audio.m4a';
-        await _audioRecorder.start(const RecordConfig(), path: path);
         setState(() {
           _isRecording = true;
         });
+
+        if (kIsWeb) {
+          await _audioRecorder.start(const RecordConfig(), path: '');
+        } else {
+          await _audioRecorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: '');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Vui lòng cấp quyền micro để thu âm.')),
+          );
+        }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi ghi âm: $e')),
-        );
-      }
+      setState(() => _isRecording = false);
     }
   }
 
@@ -138,31 +203,39 @@ class _ChatScreenState extends State<ChatScreen> {
         _isRecording = false;
       });
       
-      if (path != null) {
+      if (path != null && path.isNotEmpty) {
         await _sendAudioMessage(path);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi gửi ghi âm: $e')),
-        );
-      }
+      setState(() => _isRecording = false);
     }
   }
 
   Future<void> _sendAudioMessage(String audioPath) async {
+    if (_conversationId == null) {
+      final newConv = await _supabaseService.createConversation();
+      _conversationId = newConv['id'] as String;
+    }
+
+    setState(() => _isSending = true);
+
     try {
       final response = await ApiService.sendAssistantRequest(audioPath: audioPath);
-      final aiText = response['text'] ?? 'Xin lỗi, tôi không hiểu.';
-      final audioUrl = response['audio_url'];
+      final aiText = response['text'] ?? 'Cháu chào Bác, Bác cần cháu hỗ trợ gì ạ?';
+      final audioUrl = response['audio_url'] as String?;
       
       final aiMessage = {
         'content': aiText,
-        'is_user': false,
+        'sender': 'assistant',
         'created_at': DateTime.now().toIso8601String(),
       };
       
-      await _supabaseService.saveMessage(aiText, false);
+      await _supabaseService.saveMessage(
+        conversationId: _conversationId!,
+        sender: 'assistant',
+        content: aiText,
+        audioUrl: audioUrl,
+      );
       
       if (mounted) {
         setState(() {
@@ -171,15 +244,26 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       }
 
-      if (audioUrl != null && audioUrl.toString().isNotEmpty) {
-        await _audioPlayer.play(UrlSource(audioUrl));
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        final fullAudioUrl = audioUrl.startsWith('http') 
+            ? audioUrl 
+            : '${ApiService.baseUrl}$audioUrl';
+        try {
+          await _audioPlayer.play(UrlSource(fullAudioUrl));
+        } catch (e) {
+          debugPrint('Lỗi phát âm thanh: $e');
+        }
       }
 
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
+          SnackBar(content: Text('Lỗi xử lý giọng nói: $e')),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
       }
     }
   }
@@ -199,21 +283,56 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.backgroundLight,
       appBar: AppBar(
-        title: const Text('Trò chuyện', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Trò chuyện cùng cháu',
+          style: TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink,
+          ),
+        ),
         centerTitle: true,
+        backgroundColor: AppColors.backgroundLight,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.ink),
       ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen))
                   : _messages.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Bắt đầu cuộc trò chuyện...',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 40,
+                                  color: AppColors.primaryGreen,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Bắt đầu cuộc trò chuyện cùng cháu...',
+                                style: TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: 18,
+                                  color: AppColors.neutralGrey,
+                                ),
+                              ),
+                            ],
                           ),
                         )
                       : ListView.builder(
@@ -222,23 +341,26 @@ class _ChatScreenState extends State<ChatScreen> {
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
                             final message = _messages[index];
-                            final isUser = message['is_user'] == true;
+                            final isUser = (message['sender'] == 'user') || (message['is_user'] == true);
                             
                             return Align(
                               alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
                                 margin: const EdgeInsets.symmetric(vertical: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                                constraints: BoxConstraints(
+                                  maxWidth: MediaQuery.of(context).size.width * 0.78,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: isUser ? AppColors.primaryGreenLight : AppColors.white,
+                                  color: isUser ? AppColors.primaryGreen : AppColors.white,
                                   borderRadius: BorderRadius.circular(20).copyWith(
-                                    bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(20),
-                                    bottomLeft: isUser ? const Radius.circular(20) : const Radius.circular(0),
+                                    bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(20),
+                                    bottomLeft: isUser ? const Radius.circular(20) : const Radius.circular(4),
                                   ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 5,
+                                      blurRadius: 6,
                                       offset: const Offset(0, 2),
                                     ),
                                   ],
@@ -246,8 +368,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                 child: Text(
                                   message['content']?.toString() ?? '',
                                   style: TextStyle(
-                                    fontSize: 18, // Large, readable font
-                                    color: isUser ? AppColors.textPrimary : AppColors.textSecondary,
+                                    fontFamily: 'Roboto',
+                                    fontSize: 17, // Dễ đọc cho người cao tuổi
+                                    height: 1.4,
+                                    color: isUser ? Colors.white : AppColors.textPrimary,
                                   ),
                                 ),
                               ),
@@ -264,7 +388,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: AppColors.white,
         boxShadow: [
@@ -280,39 +404,42 @@ class _ChatScreenState extends State<ChatScreen> {
           GestureDetector(
             onLongPressStart: (_) => _startRecording(),
             onLongPressEnd: (_) => _stopRecording(),
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Nhấn giữ nút micro để nói cho cháu nghe nhé Bác.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
             child: Container(
-              padding: const EdgeInsets.all(12),
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _isRecording ? Colors.red.shade100 : AppColors.transparent,
+                color: _isRecording ? Colors.red.shade100 : AppColors.surfaceLight,
               ),
               child: Icon(
-                _isRecording ? Icons.mic : Icons.mic_none,
-                size: 32,
+                _isRecording ? Icons.mic : Icons.mic_none_rounded,
+                size: 28,
                 color: _isRecording ? Colors.red : AppColors.primaryGreen,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _messageController,
-              style: const TextStyle(fontSize: 18), // Readable font
+              style: const TextStyle(fontFamily: 'Roboto', fontSize: 17),
               decoration: InputDecoration(
-                hintText: 'Nhập tin nhắn...',
-                hintStyle: const TextStyle(fontSize: 18, color: Colors.grey),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                hintText: 'Nhập tin nhắn cho cháu...',
+                hintStyle: const TextStyle(fontFamily: 'Roboto', fontSize: 16, color: AppColors.neutralGrey),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                filled: true,
+                fillColor: AppColors.backgroundLight,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: const BorderSide(color: AppColors.primaryGreen),
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
                 ),
               ),
               onSubmitted: (_) => _sendMessage(),
@@ -320,10 +447,12 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(width: 8),
           IconButton(
-            onPressed: _sendMessage,
-            icon: const Icon(Icons.send, size: 32),
+            onPressed: _isSending ? null : _sendMessage,
+            icon: _isSending 
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen))
+                : const Icon(Icons.send_rounded, size: 30),
             color: AppColors.primaryGreen,
-            padding: const EdgeInsets.all(12), // Large touch target
+            padding: const EdgeInsets.all(10),
           ),
         ],
       ),
