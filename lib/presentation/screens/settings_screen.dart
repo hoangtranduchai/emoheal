@@ -27,16 +27,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     try {
       final settings = await _supabaseService.getUserSettings();
-      if (settings != null) {
+      if (settings != null && mounted) {
         setState(() {
           _soundEnabled = settings['sound_enabled'] ?? true;
-          _highContrastEnabled = settings['high_contrast_enabled'] ?? false;
-          _antiMistapEnabled = settings['anti_mistap_enabled'] ?? false;
+          _highContrastEnabled = settings['high_contrast'] ?? settings['high_contrast_enabled'] ?? false;
+          _antiMistapEnabled = settings['anti_mis_tap'] ?? settings['anti_mistap_enabled'] ?? false;
           _voiceType = settings['voice_type'] ?? 'hoai_my';
         });
       }
     } catch (e) {
-      // Handle error implicitly
+      debugPrint('Lỗi tải cài đặt: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -50,14 +50,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await _supabaseService.saveUserSettings(
         soundEnabled: _soundEnabled,
-        highContrastEnabled: _highContrastEnabled,
-        antiMistapEnabled: _antiMistapEnabled,
+        highContrast: _highContrastEnabled,
+        antiMisTap: _antiMistapEnabled,
         voiceType: _voiceType,
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lỗi khi lưu cài đặt')),
+          const SnackBar(content: Text('Lỗi khi lưu cài đặt.')),
         );
       }
     }

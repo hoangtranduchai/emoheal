@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -145,21 +148,24 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
   Future<void> _startRecording() async {
     try {
       if (await _audioRecorder.hasPermission()) {
-        final dir = await getApplicationDocumentsDirectory();
-        final filePath =
-            '${dir.path}/voice_memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-        await _audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: filePath,
-        );
+        String? filePath;
+        if (kIsWeb) {
+          await _audioRecorder.start(const RecordConfig(), path: '');
+        } else {
+          final dir = await getTemporaryDirectory();
+          filePath = '${dir.path}/voice_memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          await _audioRecorder.start(
+            const RecordConfig(encoder: AudioEncoder.aacLc),
+            path: filePath,
+          );
+        }
 
         _pulseController.repeat(reverse: true);
         setState(() {
           _isRecording = true;
           _isPaused = false;
           _recordDuration = 0;
-          _audioPath = null;
+          _audioPath = filePath;
           _isPlaying = false;
         });
         _startTimer();
@@ -217,8 +223,12 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
       });
 
       // Tải trước nguồn âm thanh để sẵn sàng phát lại
-      if (path != null) {
-        await _audioPlayer.setSource(DeviceFileSource(path));
+      if (path != null && path.isNotEmpty) {
+        if (kIsWeb) {
+          await _audioPlayer.setSource(UrlSource(path));
+        } else {
+          await _audioPlayer.setSource(DeviceFileSource(path));
+        }
       }
     } catch (e) {
       debugPrint('Lỗi dừng ghi âm: $e');
@@ -227,13 +237,17 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
 
   // ── 4. Nghe lại bản ghi (Playback Preview) ──
   Future<void> _togglePlayback() async {
-    if (_audioPath == null) return;
+    if (_audioPath == null || _audioPath!.isEmpty) return;
     try {
       if (_isPlaying) {
         await _audioPlayer.pause();
         setState(() => _isPlaying = false);
       } else {
-        await _audioPlayer.play(DeviceFileSource(_audioPath!));
+        if (kIsWeb) {
+          await _audioPlayer.play(UrlSource(_audioPath!));
+        } else {
+          await _audioPlayer.play(DeviceFileSource(_audioPath!));
+        }
         setState(() => _isPlaying = true);
       }
     } catch (e) {
@@ -321,7 +335,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
       _pulseController.reset();
       _timer?.cancel();
 
-      if (_audioPath != null) {
+      if (_audioPath != null && !kIsWeb) {
         try {
           final file = File(_audioPath!);
           if (await file.exists()) await file.delete();
@@ -344,7 +358,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
 
   // ── 6. Lưu và Gửi hồi ký lên Supabase (Save & Upload) ──
   Future<void> _uploadVoiceMemo() async {
-    if (_audioPath == null) {
+    if (_audioPath == null || _audioPath!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -362,11 +376,20 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
       final topicTitle = _topics[_selectedTopicIndex].title;
       final fileName = 'memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-      final fileUrl = await _supabaseService.uploadVoiceMemo(_audioPath!, fileName);
+      Uint8List bytes;
+      if (kIsWeb) {
+        final res = await http.get(Uri.parse(_audioPath!));
+        bytes = res.bodyBytes;
+      } else {
+        bytes = await File(_audioPath!).readAsBytes();
+      }
+
+      final fileUrl = await _supabaseService.uploadVoiceMemoBytes(bytes, fileName);
       await _supabaseService.saveVoiceMemoMetadata(
-        topicTitle,
-        fileUrl,
-        _recordDuration > 0 ? _recordDuration : _playbackDuration.inSeconds,
+        title: topicTitle,
+        audioUrl: fileUrl,
+        durationSeconds: _recordDuration > 0 ? _recordDuration : _playbackDuration.inSeconds,
+        topic: topicTitle,
       );
 
       if (mounted) {

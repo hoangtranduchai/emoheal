@@ -73,7 +73,7 @@ class HomeScreen extends StatelessWidget {
             bottom: MediaQuery.of(context).padding.bottom + 16,
             child: AssistantBubble(
               onTap: () {
-                // TODO: Mở trợ lý AI
+                Navigator.of(context).pushNamed(AppRoutes.chat);
               },
             ),
           ),
@@ -296,29 +296,132 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
     );
   }
 
-  Future<void> _deleteContact(String id) async {
-    final confirm = await showDialog<bool>(
+  void _showDeleteConfirmationBottomSheet(String id, String contactName) {
+    showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xóa liên hệ'),
-        content: const Text('Bạn có chắc chắn muốn xóa liên hệ này?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Xóa', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        decoration: const BoxDecoration(
+          color: AppColors.backgroundLight,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Thanh gạt (Drag Handle)
+            Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Icon Badge cảnh báo
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppColors.sosOrange.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.sosOrange,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Tiêu đề
+            const Text(
+              'Xóa liên hệ khẩn cấp?',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Nội dung
+            Text(
+              'Số điện thoại của "$contactName" sẽ bị gỡ khỏi danh sách khẩn cấp. Bác có thể thêm lại bất cứ lúc nào ạ.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Nút 1: Xóa liên hệ (Nền cam, 56dp)
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.sosOrange,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Xóa liên hệ',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Nút 2: Giữ lại liên hệ (Viền xanh, 56dp)
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text(
+                  'Giữ lại liên hệ',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryGreen,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-    
-    if (confirm == true) {
-      await _supabaseService.deleteEmergencyContact(id);
-      _loadContacts();
-    }
+    ).then((confirmed) async {
+      if (confirmed == true) {
+        await _supabaseService.deleteEmergencyContact(id);
+        _loadContacts();
+      }
+    });
   }
 
   @override
@@ -360,17 +463,19 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
                 );
               } else if (index <= _contacts.length) {
                 final contact = _contacts[index - 1];
-                final name = contact['name'] as String;
-                final phone = contact['phone_number'] as String;
+                final name = (contact['contact_name'] ?? contact['name'] ?? 'Liên hệ') as String;
+                final phone = (contact['contact_phone'] ?? contact['phone_number'] ?? '') as String;
                 final initial = name.isNotEmpty ? name[0].toUpperCase() : 'C';
                 
                 return EmergencyContactChip(
                   name: name,
                   initial: initial,
                   onTap: () {
-                    launchUrl(Uri.parse('tel:$phone'));
+                    if (phone.isNotEmpty) {
+                      launchUrl(Uri.parse('tel:$phone'));
+                    }
                   },
-                  onLongPress: () => _deleteContact(contact['id'] as String),
+                  onLongPress: () => _showDeleteConfirmationBottomSheet(contact['id'] as String, name),
                 );
               } else {
                 return _AddContactButton(onTap: _showAddContactSheet);
