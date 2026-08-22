@@ -28,10 +28,21 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> _messages = [];
   bool _isLoading = true;
 
+  bool _initialized = false;
+
   @override
-  void initState() {
-    super.initState();
-    _initConversation();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is String && args.isNotEmpty) {
+        _conversationId = args;
+        _loadMessages();
+      } else {
+        _initConversation();
+      }
+    }
   }
 
   @override
