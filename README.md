@@ -1,4 +1,4 @@
-# lotus_haven
+# EmoHeal
 
 A new Flutter project.
 
