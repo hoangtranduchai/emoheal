@@ -9,8 +9,6 @@ import 'presentation/screens/settings_screen.dart';
 import 'presentation/screens/voice_memo_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/otp_screen.dart';
-import 'presentation/screens/auth/welcome_screen.dart';
-import 'presentation/screens/chat_screen.dart';
 
 class AppRoutes {
   static const String onboarding = '/';
@@ -20,13 +18,13 @@ class AppRoutes {
   static const String lotusBreathing = '/lotus_breathing';
   static const String radio = '/radio';
   static const String settings = '/settings';
-  static const String authWelcome = '/auth/welcome';
   static const String authLogin = '/auth/login';
   static const String authOtp = '/auth/otp';
-  static const String chat = '/chat';
 }
 
 class AppRouter {
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page;
 
@@ -52,17 +50,11 @@ class AppRouter {
       case AppRoutes.settings:
         page = const SettingsScreen();
         break;
-      case AppRoutes.authWelcome:
-        page = const WelcomeScreen();
-        break;
       case AppRoutes.authLogin:
         page = const LoginScreen();
         break;
       case AppRoutes.authOtp:
         page = const OtpScreen();
-        break;
-      case AppRoutes.chat:
-        page = const ChatScreen();
         break;
       default:
         page = const OnboardingScreen();

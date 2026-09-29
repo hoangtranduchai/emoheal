@@ -1,175 +1,148 @@
-# Database Schema & Security
+# Database Schema & Security (Supabase PostgreSQL)
 
-This document outlines the Supabase database structure, Row Level Security (RLS) policies, and storage configurations for LotusHaven.
+This document outlines the streamlined Supabase database structure, Row Level Security (RLS) policies, and storage configurations for EmoHeal ("Vòng tay thấu cảm").
 
 **Supabase Connection URL:** `https://dahysdyexofpqfkibobz.supabase.co`
 
-## Entity Relationship Diagram
+---
+
+## 1. Entity Relationship Diagram (ERD)
 
 ```mermaid
 erDiagram
-    PROFILES ||--o{ CONVERSATIONS : "1-N"
-    PROFILES ||--o{ VOICE_MEMOS : "1-N"
-    PROFILES ||--|| USER_SETTINGS : "1-1"
-    CONVERSATIONS ||--o{ MESSAGES : "1-N"
-    
+    AUTH_USERS ||--|| PROFILES : "1-1 (id)"
+    PROFILES ||--|| USER_SETTINGS : "1-1 (user_id)"
+    PROFILES ||--o{ VOICE_MEMOS : "1-N (user_id)"
+    PROFILES ||--o{ EMERGENCY_CONTACTS : "1-N (tối đa 5)"
+    PROFILES |o--o{ SYSTEM_LOGS : "1-N (user_id, nullable)"
+
+    AUTH_USERS {
+        uuid id PK
+        text phone UK
+    }
+
     PROFILES {
-        uuid id PK "FK auth.users"
-        text display_name
-        text email
-        text phone
-        text avatar_url
-        text role
-        timestamptz created_at
-        timestamptz updated_at
-    }
-    
-    CONVERSATIONS {
-        uuid id PK
-        uuid user_id FK
-        text title
-        timestamptz last_message_at
+        uuid id PK, FK "auth.users"
+        text display_name "Mặc định: 'Bác'"
+        text phone UK "Masked / Sensitive"
         timestamptz created_at
     }
-    
-    MESSAGES {
-        uuid id PK
-        uuid conversation_id FK
-        text sender
-        text content
-        text audio_url
-        timestamptz created_at
+
+    USER_SETTINGS {
+        uuid user_id PK, FK "profiles"
+        boolean sound_enabled "Mặc định: true"
+        text voice_type "hoai_my | nam_minh"
+        float8 font_size_scale ">= 1.0 (Mặc định: 1.15)"
+        boolean anti_mis_tap "Mặc định: false"
+        boolean voice_control_enabled "Mặc định: true"
     }
-    
+
     VOICE_MEMOS {
         uuid id PK
-        uuid user_id FK
+        uuid user_id FK "profiles"
         text title
-        text audio_url
-        int duration_seconds
+        text audio_url "Private Storage"
+        int4 duration_seconds ">= 0"
         text transcript
-        text topic
         timestamptz created_at
     }
-    
-    USER_SETTINGS {
-        uuid user_id PK "FK profiles"
-        boolean sound_enabled
-        text voice_type
-        boolean high_contrast
-        boolean anti_mis_tap
-        timestamptz updated_at
-    }
-    
+
     RADIO_STATIONS {
         uuid id PK
         text name
         text stream_url
-        text genre
-        boolean is_active
-        int sort_order
+        text genre "dan_ca | tho | nhac_cach_mang | thien_nhien | khac"
+        boolean is_active "Mặc định: true"
     }
-    
-    PROFILES ||--o{ EMERGENCY_CONTACTS : "1-N (max 5)"
+
     EMERGENCY_CONTACTS {
         uuid id PK
-        uuid user_id FK
+        uuid user_id FK "profiles"
         text contact_name
-        text contact_phone
-        int sort_order
+        text contact_phone "Masked / Sensitive"
+        int4 priority_order "1 đến 5"
+        timestamptz created_at
+    }
+
+    SYSTEM_LOGS {
+        uuid id PK
+        uuid user_id FK "profiles (nullable)"
+        text platform "Android | iOS | Web"
+        text level "INFO | WARN | ERROR | CRITICAL"
+        text tag "STT | TTS | AUTH | SOS | CLIENT..."
+        text message
+        text error_details
+        text stack_trace
+        jsonb breadcrumbs "JSON array"
         timestamptz created_at
     }
 ```
 
-## SQL Table Definitions
+> **Ghi chú Kiến trúc:** Hội thoại với Trợ lý AI tuân theo **Phương án A (Session-based / Ephemeral)**: Toàn bộ tin nhắn trao đổi được lưu tạm trong bộ nhớ RAM của ứng dụng trong phiên đang mở để bảo vệ sự riêng tư tuyệt đối cho các Bác và đạt chi phí $0 Budget.
 
-### 1. `profiles`
+---
+
+## 2. SQL Table Definitions
+
+### 1. `profiles` (Hồ sơ người dùng)
 ```sql
 CREATE TABLE public.profiles (
-    id UUID REFERENCES auth.users(id) PRIMARY KEY,
-    display_name TEXT DEFAULT 'Bác',
-    email TEXT UNIQUE,
+    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+    display_name TEXT NOT NULL DEFAULT 'Bác',
     phone TEXT UNIQUE,
-    avatar_url TEXT,
-    role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-### 2. `conversations`
+### 2. `user_settings` (Cài đặt trợ năng)
 ```sql
-CREATE TABLE public.conversations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-    title TEXT,
-    last_message_at TIMESTAMPTZ DEFAULT now(),
-    created_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.user_settings (
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE PRIMARY KEY,
+    sound_enabled BOOLEAN NOT NULL DEFAULT true,
+    voice_type TEXT NOT NULL DEFAULT 'hoai_my' CHECK (voice_type IN ('hoai_my', 'nam_minh')),
+    font_size_scale DOUBLE PRECISION NOT NULL DEFAULT 1.15 CHECK (font_size_scale >= 1.0),
+    anti_mis_tap BOOLEAN NOT NULL DEFAULT false,
+    voice_control_enabled BOOLEAN NOT NULL DEFAULT true
 );
 ```
 
-### 3. `messages`
-```sql
-CREATE TABLE public.messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    conversation_id UUID REFERENCES public.conversations(id) ON DELETE CASCADE,
-    sender TEXT NOT NULL CHECK (sender IN ('user', 'assistant')),
-    content TEXT,
-    audio_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### 4. `voice_memos`
+### 3. `voice_memos` (Hồi ký giọng nói)
 ```sql
 CREATE TABLE public.voice_memos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-    title TEXT,
-    audio_url TEXT,
-    duration_seconds INT,
-    transcript TEXT,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
     topic TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
+    audio_url TEXT NOT NULL,
+    duration_seconds INT NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+    transcript TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-### 5. `radio_stations`
+### 4. `radio_stations` (Đài phát thanh hoài niệm)
 ```sql
 CREATE TABLE public.radio_stations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     stream_url TEXT NOT NULL,
-    genre TEXT NOT NULL CHECK (genre IN ('dan_ca', 'tho', 'nhac_cach_mang', 'thien_nhien', 'khac')),
-    is_active BOOLEAN DEFAULT true,
-    sort_order INT DEFAULT 0
+    genre TEXT NOT NULL DEFAULT 'nhac_cach_mang' CHECK (genre IN ('dan_ca', 'tho', 'nhac_cach_mang', 'thien_nhien', 'khac')),
+    is_active BOOLEAN NOT NULL DEFAULT true
 );
 ```
 
-### 6. `user_settings`
-```sql
-CREATE TABLE public.user_settings (
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE PRIMARY KEY,
-    sound_enabled BOOLEAN DEFAULT true,
-    voice_type TEXT DEFAULT 'hoai_my' CHECK (voice_type IN ('hoai_my', 'nam_minh')),
-    high_contrast BOOLEAN DEFAULT false,
-    anti_mis_tap BOOLEAN DEFAULT false,
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### 7. `emergency_contacts`
+### 5. `emergency_contacts` (Danh bạ SOS khẩn cấp - Tối đa 5)
 ```sql
 CREATE TABLE public.emergency_contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     contact_name TEXT NOT NULL,
     contact_phone TEXT NOT NULL,
-    sort_order INT DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT now()
+    priority_order INT NOT NULL DEFAULT 1 CHECK (priority_order BETWEEN 1 AND 5),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Max 5 contacts per user / Giới hạn 5 liên hệ khẩn cấp
+-- Trigger giới hạn tối đa 5 liên hệ khẩn cấp
 CREATE OR REPLACE FUNCTION public.enforce_max_emergency_contacts()
 RETURNS trigger AS $$
 BEGIN
@@ -185,62 +158,72 @@ CREATE TRIGGER enforce_max_emergency_contacts
   FOR EACH ROW EXECUTE PROCEDURE public.enforce_max_emergency_contacts();
 ```
 
-## Indexes for Performance
-
+### 6. `system_logs` (Nhật ký Hệ thống & Kiểm toán cho Dev/Test/AI)
 ```sql
-CREATE INDEX idx_conversations_user_id ON public.conversations(user_id);
-CREATE INDEX idx_messages_conversation_id ON public.messages(conversation_id);
-CREATE INDEX idx_voice_memos_user_id ON public.voice_memos(user_id);
+CREATE TABLE public.system_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    platform TEXT NOT NULL DEFAULT 'Mobile',
+    level TEXT NOT NULL DEFAULT 'INFO' CHECK (level IN ('INFO', 'WARN', 'ERROR', 'CRITICAL')),
+    tag TEXT NOT NULL,
+    message TEXT NOT NULL,
+    error_details TEXT,
+    stack_trace TEXT,
+    breadcrumbs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
-## Row Level Security (RLS) Policies
+---
 
-Enable RLS on all tables:
+## 3. Row Level Security (RLS) & Data Privacy
+
 ```sql
+-- Bật RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.voice_memos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.radio_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
-```
+ALTER TABLE public.voice_memos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.emergency_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.radio_stations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
 
-**General Policy Rules:**
-*   Users can only SELECT, INSERT, UPDATE, DELETE their own data (where `id` or `user_id` matches `auth.uid()`).
-*   Admin role can access all data.
-*   `radio_stations` is readable by all authenticated users.
-
-Example Policy for `profiles`:
-```sql
+-- 1. profiles: Chỉ xem và sửa thông tin của chính mình
 CREATE POLICY "Users can view own profile" ON public.profiles
     FOR SELECT USING (auth.uid() = id);
-
 CREATE POLICY "Users can update own profile" ON public.profiles
     FOR UPDATE USING (auth.uid() = id);
-```
 
-Example Policy for `radio_stations`:
-```sql
+-- 2. user_settings: Quyền sở hữu
+CREATE POLICY "Users can access own settings" ON public.user_settings
+    FOR ALL USING (auth.uid() = user_id);
+
+-- 3. voice_memos: Riêng tư tuyệt đối
+CREATE POLICY "Users can manage own voice memos" ON public.voice_memos
+    FOR ALL USING (auth.uid() = user_id);
+
+-- 4. emergency_contacts: Riêng tư tuyệt đối
+CREATE POLICY "Users can manage own contacts" ON public.emergency_contacts
+    FOR ALL USING (auth.uid() = user_id);
+
+-- 5. radio_stations: Công khai cho mọi người
 CREATE POLICY "Anyone can view active radio stations" ON public.radio_stations
     FOR SELECT USING (is_active = true);
+
+-- 6. system_logs: Cho phép ghi log lỗi
+CREATE POLICY "Allow public log insertion" ON public.system_logs
+    FOR INSERT WITH CHECK (true);
 ```
 
-## Custom Access Token Hook
+---
 
-To provide O(1) authorization checks in RLS policies without querying the `profiles` table, we use a custom JWT hook to inject the `user_role` into `auth.jwt()`.
-
-*(Supabase Custom Claims hook configuration required in dashboard)*
-
-## Auto-trigger: `handle_new_user()`
-
-A PostgreSQL trigger automatically creates a `profiles` entry and a `user_settings` entry when a new user signs up in `auth.users`.
+## 4. Auto-trigger: `handle_new_user()`
 
 ```sql
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id)
-  VALUES (new.id);
+  INSERT INTO public.profiles (id, phone, display_name)
+  VALUES (new.id, new.phone, COALESCE(new.raw_user_meta_data->>'display_name', 'Bác'));
   
   INSERT INTO public.user_settings (user_id)
   VALUES (new.id);
@@ -254,9 +237,11 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 ```
 
-## Storage Buckets
+---
 
-1.  `voice-memos`: **Private** - Stores user voice recordings. RLS restricted to owner.
-2.  `avatars`: **Private** - Stores user profile images.
-3.  `radio`: **Public** - Stores static radio metadata/thumbnails if applicable.
-4.  `tts-cache`: **Private** - Caches generated TTS audio from the AI assistant.
+## 5. Storage Buckets
+
+1. `voice-memos`: **Private** — File `.m4a` ghi âm hồi ký của các Bác.
+2. `avatars`: **Private** — Lưu ảnh đại diện nếu có.
+3. `radio`: **Public** — Ảnh bìa và danh mục kênh phát thanh.
+4. `tts-cache`: **Private** — Bộ đệm âm thanh giọng đọc hướng dẫn.

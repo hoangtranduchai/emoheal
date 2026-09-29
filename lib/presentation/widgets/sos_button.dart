@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/logger.dart';
 import '../../core/theme.dart';
-
 
 class SOSButton extends StatefulWidget {
   final double size;
-  
+
   const SOSButton({
     super.key,
     this.size = 120.0,
@@ -25,7 +25,7 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    
+
     // Ripple Animation (Infinite)
     _rippleController = AnimationController(
       vsync: this,
@@ -84,13 +84,36 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
   }
 
   Future<void> _makeEmergencyCall() async {
-    final Uri url = Uri.parse('tel:115');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
+    AppLogger.w(
+        '🚨 KÍCH HOẠT NÚT KHẨN CẤP SOS (Đã giữ 3 giây) -> Gọi Cấp cứu 115!',
+        tag: 'SOS');
+
+    const String targetPhone = '115';
+    const String contactName = 'Cấp cứu 115';
+
+    AppLogger.event('SOS_TRIGGERED',
+        params: {'phone': targetPhone, 'name': contactName});
+
+    final Uri url = Uri.parse('tel:$targetPhone');
+    try {
+      final launched =
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(url);
+      }
+      AppLogger.i(
+          'Đã mở trình quay số khẩn cấp ($contactName: $targetPhone) thành công',
+          tag: 'SOS');
+    } catch (e) {
+      AppLogger.e('Không thể mở ứng dụng điện thoại để gọi $targetPhone: $e',
+          tag: 'SOS');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể thực hiện cuộc gọi. Vui lòng quay số 115 thủ công.')),
+          const SnackBar(
+            content: Text(
+                'Không thể tự động gọi cho $contactName. Bác vui lòng quay số 115 trên bàn phím nhé ạ.'),
+            backgroundColor: AppColors.sosOrange,
+          ),
         );
       }
     }
@@ -114,7 +137,8 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                 animation: _rippleController,
                 builder: (context, child) {
                   // Offset each ripple by a fraction
-                  double progress = (_rippleController.value + (index * 0.33)) % 1.0;
+                  double progress =
+                      (_rippleController.value + (index * 0.33)) % 1.0;
                   return Opacity(
                     opacity: 1.0 - progress,
                     child: Transform.scale(
@@ -124,7 +148,8 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                         height: widget.size,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppColors.sosOrangeLight2.withAlpha(77), // 0.3 * 255
+                          color: AppColors.sosOrangeLight2
+                              .withAlpha(77), // 0.3 * 255
                         ),
                       ),
                     ),
@@ -143,7 +168,8 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                   child: CircularProgressIndicator(
                     value: _progressAnimation.value,
                     strokeWidth: 16,
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.redAccent),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.redAccent),
                     backgroundColor: AppColors.transparent,
                   ),
                 );
@@ -174,14 +200,39 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
                 ],
               ),
               child: Center(
-                child: Text(
-                  'SOS',
-                  style: TextStyle(
-                    fontFamily: 'Roboto',
-                    fontSize: widget.size * 0.35,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.white,
-                    letterSpacing: 2.0,
+                child: Padding(
+                  padding: EdgeInsets.all(widget.size * 0.08),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'SOS',
+                          style: TextStyle(
+                            fontFamily: 'Roboto',
+                            fontSize: widget.size * 0.32,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.white,
+                            letterSpacing: 2.0,
+                            height: 1.05,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '115',
+                          style: TextStyle(
+                            fontFamily: 'Roboto',
+                            fontSize: widget.size * 0.15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.white.withValues(alpha: 0.95),
+                            letterSpacing: 1.0,
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

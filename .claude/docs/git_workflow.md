@@ -1,8 +1,8 @@
 # Git Workflow & Best Practices
 
-LotusHaven utilizes **GitHub Flow**, a lightweight, branch-based workflow suitable for modern continuous integration environments.
+EmoHeal utilizes **GitHub Flow**, a lightweight, branch-based workflow suitable for modern continuous integration environments.
 
-**Repository:** `hoangtranduchai/lotushaven`
+**Repository:** `hoangtranduchai/emoheal`
 
 ## General Rules
 

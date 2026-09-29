@@ -1,47 +1,43 @@
-# LotusHaven Architecture
+# EmoHeal Architecture
 
 ## System Architecture
 
-The LotusHaven system is comprised of three main components: a cross-platform Flutter application, a Supabase backend for persistent storage and authentication, and a Python FastAPI service for AI-driven voice interactions.
+The EmoHeal system is comprised of three main components: a cross-platform Flutter application, a Supabase backend for persistent storage and authentication, and a Python FastAPI service for AI-driven voice interactions.
 
 ```mermaid
 graph TD
     %% App Layer
-    App[Flutter App\nPresentation / Domain / Data]
+    App[Flutter App\nPresentation / Data]
     
     %% Cloud Services
-    Supabase[(Supabase Cloud\nAuth + DB + Storage)]
-    FastAPI[Python FastAPI\nRender.com]
+    Supabase[(Supabase Cloud\nPostgreSQL 15 + Storage)]
+    FastAPI[Python FastAPI Gateway\nWebSocket / REST]
     
-    %% AI Models (external)
-    Whisper[faster-whisper\nPhoWhisper]
-    Gemini[Gemini Flash API]
-    TTS[edge-tts\nvi-VN]
+    %% AI Models
+    GeminiLive[Gemini Live API\ngemini-3.1-flash-live-preview\nNative Realtime Audio]
+    GeminiFlash[Google Gemini 3.7 Flash\nMultimodal Audio & Text]
+    TTS[edge-tts\nIn-Memory RAM Cache 0.01ms]
 
     %% Connections
-    App <-->|Direct / Realtime| Supabase
-    App <-->|HTTP / Audio| FastAPI
-    FastAPI -->|Audio| Whisper
-    Whisper -->|Text| Gemini
-    Gemini -->|Text/JSON| TTS
-    TTS -->|Audio| FastAPI
+    App <-->|Local-First / REST / Realtime| Supabase
+    App <-->|WebSocket Real-Time Voice /ws/live-assistant| FastAPI
+    App <-->|HTTP REST Audio/Text /api/assistant| FastAPI
+    FastAPI <-->|Full-Duplex Audio Stream| GeminiLive
+    FastAPI -->|Audio Bytes / Text| GeminiFlash
+    FastAPI -->|TTS Text| TTS
 ```
 
 ## Data Flow for Key Operations
 
 ### Auth Flow
-1. User enters phone number/email on Flutter App.
-2. App sends OTP/Magic Link request to Supabase Auth.
-3. User verifies. Supabase returns JWT.
-4. App stores JWT and uses it for subsequent requests.
+1. User enters phone number on Flutter App.
+2. App sends 4-digit OTP request via FastAPI ($0 SMS budget) or Supabase.
+3. User verifies with 4-digit code. System issues authenticated JWT.
+4. App automatically syncs local offline data to Supabase Cloud.
 
 ### AI Assistant Flow
-1. User taps the Assistant Bubble (floating action button).
-2. App records audio via microphone.
-3. App sends audio payload (WAV/M4A) via HTTP POST to FastAPI.
-4. FastAPI processes audio through AI pipeline (STT -> LLM -> TTS).
-5. FastAPI returns JSON containing Intent, Text, and Audio URL/Binary.
-6. App plays response audio and performs UI navigation if required.
+1. **Real-Time Mode (Primary):** User connects to WebSocket `/ws/live-assistant`. Gemini Live API handles native bidirectional speech with VAD, Barge-in interruption (< 50ms), Live Subtitles, and Session Resumption.
+2. **REST Mode (Fallback):** App sends audio file or text via `POST /api/assistant`. Gemini 3.7 Flash natively listens, transcribes, and responds with JSON in a single call. Edge-TTS generates neural voice audio with In-Memory RAM Cache (0.01ms).
 
 ### Voice Memo Recording
 1. User records a memo in the app.
@@ -50,26 +46,22 @@ graph TD
 
 ### Radio Playback
 1. App queries `radio_stations` table from Supabase DB.
-2. App streams audio directly from the `stream_url` using a background audio player.
+2. App streams audio directly from the `stream_url` using a background audio player coordinated by `SoundCoordinator`.
 
 ## Deployment Strategy
 
-*   **Flutter App:** Cross-platform deployment targeting iOS, Android, and Web/Desktop (if needed).
-*   **FastAPI Backend:** Deployed on Render.com (free tier). Note: Cold starts may take 30-60s on the free tier.
-*   **Database & Auth:** Hosted on Supabase Cloud (https://dahysdyexofpqfkibobz.supabase.co).
+*   **Flutter App:** Cross-platform deployment targeting Android, iOS, and Web.
+*   **FastAPI Backend:** Deployed on Render.com or custom server with Pre-warmed Gemini & TTS RAM Cache.
+*   **Database & Auth:** Hosted on Supabase Cloud.
 
 ## Clean Architecture Layers in Flutter
 
 The Flutter app follows Clean Architecture principles:
 
-1.  **Presentation Layer (`lib/presentation`):** UI components (Widgets, Screens) and State Management (Riverpod Providers).
-2.  **Domain Layer (`lib/domain`):** Business logic, entities (models), and repository interfaces. Agnostic of frameworks.
-3.  **Data Layer (`lib/data`):** Repository implementations, data sources (Supabase, REST APIs), and DTOs (Data Transfer Objects).
-
-## API Communication
-
-*   **Flutter ↔ Supabase:** Direct connection using the `supabase_flutter` SDK. Handles authentication, database queries, and storage operations.
-*   **Flutter ↔ FastAPI:** Standard HTTP REST calls (e.g., via `dio` or `http` packages) for sending audio files and receiving AI responses.
+1.  **Presentation Layer (`lib/presentation`):** UI components (Widgets, Screens) and Reactive Overlays (`LiveVoiceOverlay`, `AssistantBubble`).
+2.  **Domain Layer (`lib/domain`):** Business logic, entities (models), and repository interfaces.
+3.  **Data Layer (`lib/data`):** Repository implementations, data sources (`SupabaseService`, `ApiService`, `LiveVoiceService`).
+4.  **Core Utilities (`lib/core`):** `SoundCoordinator`, `VoiceGuide`, `AppLogger`, `ResponsiveUtils`, `AppTheme`.
 
 ## Environment Configuration
 
@@ -81,9 +73,12 @@ Secrets and configuration are managed via `.env` files.
 **Example `.env.example`:**
 ```env
 # Supabase
-SUPABASE_URL=https://dahysdyexofpqfkibobz.supabase.co
-SUPABASE_ANON_KEY=your_anon_key_here
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key-here
 
-# FastAPI
-FASTAPI_BASE_URL=https://your-render-app.onrender.com
+# FastAPI Backend
+BACKEND_URL=http://127.0.0.1:8000
+
+# Google Gemini AI
+GEMINI_API_KEY=your-gemini-api-key-here
 ```

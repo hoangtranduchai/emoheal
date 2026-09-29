@@ -12,14 +12,20 @@ class ResponsiveUtils {
   }
 
   static double getCardSize(BuildContext context) {
-    return isTablet(context) ? 180.0 : 145.5;
+    return isTablet(context) ? 180.0 : 160.0;
   }
 
   static double getCardPadding(BuildContext context) {
-    return isTablet(context) ? 64.0 : 28.0;
+    if (isTablet(context)) return 64.0;
+    final width = MediaQuery.of(context).size.width;
+    if (width <= 340) return 16.0;
+    return 24.0;
   }
 
   static double getCardGap(BuildContext context) {
-    return isTablet(context) ? 40.0 : 28.0;
+    if (isTablet(context)) return 40.0;
+    final width = MediaQuery.of(context).size.width;
+    if (width <= 340) return 14.0;
+    return 20.0;
   }
 }

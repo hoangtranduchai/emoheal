@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 
-/// Bảng màu ứng dụng LotusHaven — trích xuất trực tiếp từ Figma.
+/// Bảng màu ứng dụng EmoHeal — trích xuất trực tiếp từ Figma.
 ///
 /// Mỗi hằng số được đặt tên ngữ nghĩa theo vai trò sử dụng trong giao diện.
 /// Tuyệt đối KHÔNG có giá trị nào được bịa ra; tất cả đều ánh xạ 1-1 với
@@ -101,21 +100,22 @@ class AppColors {
   static const Color transparentBlack = Color(0x00100F13);
 }
 
-/// Các hằng số kích thước chữ cũ
+/// Các hằng số kích thước chữ chuẩn Zero-Barrier (tối thiểu 16sp)
 class AppTextSizes {
   static const double headline = 24.0;
-  static const double body = 14.0;
+  static const double body = 16.0;
 }
 
-/// Theme chính của ứng dụng LotusHaven.
+/// Theme chính của ứng dụng EmoHeal.
 ///
 /// Tích hợp GoogleFonts để nạp font Roboto hỗ trợ chuẩn Tiếng Việt (UTF-8).
 class AppTheme {
   AppTheme._();
 
-  // ─── Text Styles (trích từ Figma) ─────────────────────────────────
+  // ─── Text Styles (trích từ Figma, tuân thủ font tối thiểu 16sp) ───
 
-  static final TextStyle headingLarge = GoogleFonts.roboto(
+  static const TextStyle headingLarge = TextStyle(
+    fontFamily: 'Roboto',
     fontSize: 24,
     fontWeight: FontWeight.w400,
     height: 1.2,
@@ -123,35 +123,40 @@ class AppTheme {
     color: AppColors.textOnDark,
   );
 
-  static final TextStyle headingBold = GoogleFonts.roboto(
+  static const TextStyle headingBold = TextStyle(
+    fontFamily: 'Roboto',
     fontSize: 24,
     fontWeight: FontWeight.w600,
     height: 1.5,
     color: AppColors.textOnDark,  
   );
 
-  static final TextStyle titleSemiBold = GoogleFonts.roboto(
+  static const TextStyle titleSemiBold = TextStyle(
+    fontFamily: 'Roboto',
     fontSize: 24,
     fontWeight: FontWeight.w600,
     height: 1.5,
     color: AppColors.textPrimary,
   );
 
-  static final TextStyle bodyRegular = GoogleFonts.roboto(
-    fontSize: 14,
+  static const TextStyle bodyRegular = TextStyle(
+    fontFamily: 'Roboto',
+    fontSize: 16,
     fontWeight: FontWeight.w400,
     height: 1.5,
     color: AppColors.textPrimary,
   );
 
-  static final TextStyle captionRegular = GoogleFonts.roboto(
-    fontSize: 12,
+  static const TextStyle captionRegular = TextStyle(
+    fontFamily: 'Roboto',
+    fontSize: 16,
     fontWeight: FontWeight.w400,
     height: 1.5,
     color: AppColors.textSecondary,
   );
 
-  static final TextStyle buttonText = GoogleFonts.roboto(
+  static const TextStyle buttonText = TextStyle(
+    fontFamily: 'Roboto',
     fontSize: 18,
     fontWeight: FontWeight.w700,
     height: 1.2,
@@ -161,7 +166,7 @@ class AppTheme {
 
   // ─── TextTheme ────────────────────────────────────────────────────
 
-  static final TextTheme textTheme = TextTheme(
+  static const TextTheme textTheme = TextTheme(
     headlineLarge: headingLarge,
     headlineMedium: headingBold,
     titleLarge: titleSemiBold,
@@ -197,10 +202,11 @@ class AppTheme {
 
   static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
+        fontFamily: 'Roboto',
         colorScheme: colorScheme,
         scaffoldBackgroundColor: AppColors.backgroundLight,
-        textTheme: GoogleFonts.robotoTextTheme(textTheme),
-        appBarTheme: AppBarTheme(
+        textTheme: textTheme,
+        appBarTheme: const AppBarTheme(
           backgroundColor: AppColors.primaryGreenDark,
           foregroundColor: AppColors.textOnDark,
           elevation: 0,

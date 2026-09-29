@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>lotus_haven</string>
+	<string>emoheal</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSContactsUsageDescription</key>
+	<string>EmoHeal cần quyền truy cập danh bạ để giúp Bác chọn nhanh số điện thoại người thân làm liên hệ khẩn cấp.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EmoHeal cần quyền sử dụng microphone để ghi âm hồi ký giọng nói và trò chuyện cùng Bác.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
