@@ -76,20 +76,25 @@ class FeatureCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(11),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               child: isHorizontal
                   ? Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SvgPicture.asset(
                           svgAsset,
-                          width: 40,
-                          height: 40,
+                          width: 36,
+                          height: 36,
                           colorFilter: ColorFilter.mode(
                               iconColor, BlendMode.srcIn),
                         ),
-                        const SizedBox(width: 16),
-                        Text(title, style: textStyle),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(title, style: textStyle),
+                          ),
+                        ),
                       ],
                     )
                   : Column(
@@ -97,16 +102,21 @@ class FeatureCard extends StatelessWidget {
                       children: [
                         SvgPicture.asset(
                           svgAsset,
-                          width: 48,
-                          height: 48,
+                          width: 44,
+                          height: 44,
                           colorFilter: ColorFilter.mode(
                               iconColor, BlendMode.srcIn),
                         ),
-                        const SizedBox(height: 14),
-                        Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          style: textStyle,
+                        const SizedBox(height: 8),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              style: textStyle,
+                            ),
+                          ),
                         ),
                       ],
                     ),

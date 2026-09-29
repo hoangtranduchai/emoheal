@@ -5,15 +5,49 @@ import '../widgets/feature_card.dart';
 import '../widgets/sos_button.dart';
 import '../widgets/emergency_contact_chip.dart';
 import '../widgets/add_contact_bottom_sheet.dart';
-import '../widgets/assistant_bubble.dart';
+import '../../core/logger.dart';
 import '../../core/theme.dart';
 import '../../core/responsive_utils.dart';
 import '../../data/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/voice_guide.dart';
+
 /// Màn hình Trang chủ — render 100% pixel-perfect theo Frame "Home" (421:1289) trên Figma.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String _displayName = 'Bác';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserDisplayName();
+    // Tự động phát âm thanh hướng dẫn khi vào màn hình Trang chủ
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      VoiceGuide.play(VoiceScripts.home);
+    });
+  }
+
+  Future<void> _loadUserDisplayName() async {
+    final name = await SupabaseService().getDisplayName();
+    if (mounted) {
+      setState(() {
+        _displayName = name;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    VoiceGuide.stop();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +72,13 @@ class HomeScreen extends StatelessWidget {
                 _TopHeader(
                   height: topHeaderHeight,
                   horizontalPadding: horizontalPadding,
+                  displayName: _displayName,
                 ),
 
                 // ── 2. SOS Section ──
                 Padding(
-                  padding: EdgeInsets.fromLTRB(horizontalPadding, 32, horizontalPadding, 0),
+                  padding: EdgeInsets.fromLTRB(
+                      horizontalPadding, 32, horizontalPadding, 0),
                   child: Center(
                     child: _SOSSection(sosSize: sosSize),
                   ),
@@ -66,17 +102,6 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ),
-
-          // ── 5. Floating Assistant Bubble ──
-          Positioned(
-            right: 16,
-            bottom: MediaQuery.of(context).padding.bottom + 16,
-            child: AssistantBubble(
-              onTap: () {
-                Navigator.of(context).pushNamed(AppRoutes.chat);
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -92,10 +117,12 @@ class _TopHeader extends StatelessWidget {
   const _TopHeader({
     required this.height,
     required this.horizontalPadding,
+    required this.displayName,
   });
 
   final double height;
   final double horizontalPadding;
+  final String displayName;
 
   @override
   Widget build(BuildContext context) {
@@ -143,10 +170,10 @@ class _TopHeader extends StatelessWidget {
           Positioned(
             top: 79.0 + statusBarHeight,
             left: horizontalPadding,
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Xin chào',
                   style: TextStyle(
                     fontFamily: 'Roboto',
@@ -158,10 +185,12 @@ class _TopHeader extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Bác',
-                  style: TextStyle(
+                  displayName.startsWith('Bác')
+                      ? displayName
+                      : 'Bác $displayName',
+                  style: const TextStyle(
                     fontFamily: 'Roboto',
-                    fontSize: 48,
+                    fontSize: 36,
                     fontWeight: FontWeight.w600,
                     height: 1.2,
                     color: AppColors.textOnDark,
@@ -214,7 +243,7 @@ class _SOSSection extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: 'Roboto',
-            fontSize: 14,
+            fontSize: 16,
             fontWeight: FontWeight.w400,
             height: 1.5,
             color: AppColors.textSecondary, // 60% opacity
@@ -228,7 +257,7 @@ class _SOSSection extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: 'Roboto',
-            fontSize: 14,
+            fontSize: 16,
             fontWeight: FontWeight.w400,
             height: 1.5,
             color: AppColors.textSecondary,
@@ -244,7 +273,8 @@ class _EmergencyContactsSection extends StatefulWidget {
   const _EmergencyContactsSection({required this.horizontalPadding});
 
   @override
-  State<_EmergencyContactsSection> createState() => _EmergencyContactsSectionState();
+  State<_EmergencyContactsSection> createState() =>
+      _EmergencyContactsSectionState();
 }
 
 class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
@@ -281,7 +311,8 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
       isScrollControlled: true,
       backgroundColor: AppColors.transparent,
       builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: AddContactBottomSheet(
           onSave: (name, phone) async {
             Navigator.pop(context);
@@ -396,7 +427,8 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
               height: 56,
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primaryGreen, width: 1.5),
+                  side: const BorderSide(
+                      color: AppColors.primaryGreen, width: 1.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -432,7 +464,7 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
         Padding(
           padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
           child: const Text(
-            'Liên hệ khẩn cấp',
+            'Liên hệ người thân',
             style: TextStyle(
               fontFamily: 'Roboto',
               fontSize: 20,
@@ -443,45 +475,52 @@ class _EmergencyContactsSectionState extends State<_EmergencyContactsSection> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 100,
-          child: _isLoading 
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.separated(
-            padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
-            scrollDirection: Axis.horizontal,
-            itemCount: _contacts.length + 2, // 115 default + DB contacts + add button
-            separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return EmergencyContactChip(
-                  name: '115',
-                  initial: 'C',
-                  onTap: () {
-                    launchUrl(Uri.parse('tel:115'));
-                  },
-                  onLongPress: () {},
-                );
-              } else if (index <= _contacts.length) {
-                final contact = _contacts[index - 1];
-                final name = (contact['contact_name'] ?? contact['name'] ?? 'Liên hệ') as String;
-                final phone = (contact['contact_phone'] ?? contact['phone_number'] ?? '') as String;
-                final initial = name.isNotEmpty ? name[0].toUpperCase() : 'C';
-                
-                return EmergencyContactChip(
-                  name: name,
-                  initial: initial,
-                  onTap: () {
-                    if (phone.isNotEmpty) {
-                      launchUrl(Uri.parse('tel:$phone'));
+          height: 125,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.separated(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: widget.horizontalPadding),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _contacts.length + 1, // DB contacts + Add button
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    if (index < _contacts.length) {
+                      final contact = _contacts[index];
+                      final name = (contact['contact_name'] ??
+                          contact['name'] ??
+                          'Người thân') as String;
+                      final phone = (contact['contact_phone'] ??
+                          contact['phone_number'] ??
+                          '') as String;
+                      final initial =
+                          name.isNotEmpty ? name[0].toUpperCase() : 'N';
+
+                      return EmergencyContactChip(
+                        name: name,
+                        initial: initial,
+                        onTap: () async {
+                          if (phone.isNotEmpty) {
+                            final url = Uri.parse('tel:$phone');
+                            try {
+                              final launched = await launchUrl(url,
+                                  mode: LaunchMode.externalApplication);
+                              if (!launched) await launchUrl(url);
+                            } catch (e) {
+                              AppLogger.e('Không thể gọi điện cho $name: $e',
+                                  tag: 'CONTACT');
+                            }
+                          }
+                        },
+                        onLongPress: () => _showDeleteConfirmationBottomSheet(
+                            contact['id'] as String, name),
+                      );
+                    } else {
+                      return _AddContactButton(onTap: _showAddContactSheet);
                     }
                   },
-                  onLongPress: () => _showDeleteConfirmationBottomSheet(contact['id'] as String, name),
-                );
-              } else {
-                return _AddContactButton(onTap: _showAddContactSheet);
-              }
-            },
-          ),
+                ),
         ),
       ],
     );
@@ -501,7 +540,7 @@ class _AddContactButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          constraints: const BoxConstraints(minWidth: 120, minHeight: 80),
+          width: 144,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -511,15 +550,21 @@ class _AddContactButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.add_circle_outline, color: AppColors.primaryGreen, size: 32),
-              SizedBox(height: 8),
-              Text(
-                'Thêm mới',
-                style: TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.primaryGreen,
+              Icon(Icons.add_circle_outline,
+                  color: AppColors.primaryGreen, size: 30),
+              SizedBox(height: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Thêm mới',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primaryGreen,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -548,7 +593,8 @@ class _FeatureGrid extends StatelessWidget {
                 child: FeatureCard(
                   title: 'Hồi ký\nGiọng nói',
                   svgAsset: 'assets/icons/microphone.svg',
-                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.voiceMemo),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.voiceMemo),
                 ),
               ),
             ),
@@ -557,9 +603,10 @@ class _FeatureGrid extends StatelessWidget {
               child: SizedBox(
                 height: cardHeight,
                 child: FeatureCard(
-                  title: 'Nhịp thở',
+                  title: 'Nhịp thở hoa sen',
                   svgAsset: 'assets/icons/lotus.svg',
-                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.lotusBreathing),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.lotusBreathing),
                 ),
               ),
             ),
@@ -585,7 +632,8 @@ class _FeatureGrid extends StatelessWidget {
                 child: FeatureCard(
                   title: 'Cài đặt &\nHỗ trợ tiếp cận',
                   svgAsset: 'assets/icons/setting.svg',
-                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.settings),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.settings),
                 ),
               ),
             ),

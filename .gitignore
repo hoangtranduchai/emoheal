@@ -1,6 +1,7 @@
 # Miscellaneous
 *.class
 *.log
+/logs/
 *.pyc
 *.swp
 .DS_Store
@@ -58,6 +59,11 @@ backend/*.pyc
 backend/.venv/
 backend/venv/
 backend/.env
+backend/static/*.mp3
+backend/static/cache/
+backend/temp_*
+backend/*.mp3
+
 
 # ─── Generated / Cached ───────────────────────────────────────
 *.g.dart
@@ -82,3 +88,6 @@ figma-mcp-server/
 
 # ─── Agents / Local config ────────────────────────────────────
 .agents/
+scratch/
+static/
+flutter_*.png

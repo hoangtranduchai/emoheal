@@ -1,4 +1,4 @@
-package com.example.lotus_haven
+package com.example.emoheal
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,72 +1,26 @@
 # Screens Map & Navigation
 
-LotusHaven consists of 11 distinct mobile screens. The app uses `go_router` for navigation, specifically leveraging a `ShellRoute` to ensure the AI Assistant FAB is persistent across the app.
+EmoHeal consists of 9 core mobile screens (10 total with Onboarding) connected via `AppRouter` with smooth Fade Transitions and zero dead-ends, augmented with the persistent "Bạn đồng hành" (Live Voice) system.
 
-*(Note: The "Góc bình yên" screen has been removed from the requirements).*
+*(Note: "Góc bình yên", "Community Forum", and "ChatScreen" were removed from scope to simplify interactions for elderly users).*
 
 ## Screen Inventory
 
-| # | Screen | Figma Node | Route | Status | Notes |
+| # | Screen | Route Constant | Path | Status | Purpose |
 |---|---|---|---|---|---|
-| 1 | Onboarding | `421:1221` | `/onboarding` | Exists | Needs bug fix |
-| 2 | Auth Welcome | N/A (self-design) | `/auth` | New | |
-| 3 | Auth Login | N/A (self-design) | `/auth/login` | New | |
-| 4 | Auth OTP | N/A (self-design) | `/auth/otp` | New | |
-| 5 | Home | `421:1289` (mobile) / `2693:300` (tablet) | `/` | Exists | Needs refactor |
-| 6 | Hồi ký Giọng nói | `421:1845` | `/voice-memo` | Exists | Needs refactor |
-| 7 | Hội thoại (Chat) | `2717:587` | `/conversation/:id` | New | |
-| 8 | Lịch sử Hội thoại | `2490:528` | `/history` | Exists | Needs refactor |
-| 9 | Nhịp thở Hoa Sen | `2550:186` / `2575:473` / `2575:596` | `/breathing` | Exists | Needs refactor |
-| 10 | Đài Radio | `2585:403` / `2589:535` | `/radio` | Exists | Needs refactor |
-| 11 | Cài đặt | `2512:267` | `/settings` | Exists | Needs refactor |
+| 1 | Onboarding | `AppRoutes.onboarding` | `/` | Active | Video background, welcome audio guide |
+| 2 | Auth Login | `AppRoutes.authLogin` | `/auth/login` | Active | 56dp phone input, skip-to-guest button |
+| 3 | Auth OTP | `AppRoutes.authOtp` | `/auth/otp` | Active | 4-digit Pinput with audio prompt |
+| 4 | Home | `AppRoutes.home` | `/home` | Active | TopHeader with Bác's name, 3s SOS, contacts, 4 cards, AssistantBubble |
+| 5 | Hồi ký Giọng nói | `AppRoutes.voiceMemo` | `/voice_memos` | Active | Topic suggestions, pulse recorder, upload, emotion feedback |
+| 6 | Danh sách Hồi ký | `AppRoutes.history` | `/history` | Active | Dedicated Voice Memoir player & transcripts |
+| 7 | Nhịp thở Hoa Sen | `AppRoutes.lotusBreathing` | `/lotus_breathing` | Active | 4-4-6 breathing rhythm with video/petal animation |
+| 8 | Đài Radio | `AppRoutes.radio` | `/radio` | Active | Nostalgic folk, poetry, revolution songs |
+| 9 | Cài đặt & Trợ năng | `AppRoutes.settings` | `/settings` | Active | Name edit, font scaler, anti-mis-tap, voice picker |
 
-## Design Guidelines by Section
+## Design & Accessibility Guidelines
 
-### Auth Screens
-*   **Philosophy:** "Zero-Barrier" design tailored for the elderly.
-*   **Elements:** 
-    *   Large `56dp` input fields.
-    *   Minimum `48dp` touch targets.
-    *   Call-to-Action (CTA) buttons must be bottom-anchored.
-
-### Home Screen
-*   Contains 4 primary feature cards:
-    1.  Hồi ký Giọng nói (Voice Memos)
-    2.  Nhịp thở Hoa Sen (Lotus Breathing)
-    3.  Đài Radio (Radio)
-    4.  Cài đặt (Settings)
-
-### Responsive Design (Tablet)
-*   **Requirement:** ALL 11 screens must be responsive and adapt gracefully to tablet sizes.
-*   While Figma only provides explicit tablet designs for Home and Radio, the principles must be applied globally (e.g., constraining max-widths, adjusting grid columns, or utilizing split views where appropriate).
-
-## Navigation Architecture (`go_router`)
-
-A `ShellRoute` is employed to wrap the main application content, allowing persistent UI elements like the `AssistantBubble` to remain on screen during transitions.
-
-```dart
-// Example router setup concept
-final router = GoRouter(
-  initialLocation: '/',
-  routes: [
-    GoRoute(path: '/onboarding', ...),
-    GoRoute(path: '/auth', ...),
-    // ... other standalone routes
-    
-    ShellRoute(
-      builder: (context, state, child) {
-        return Scaffold(
-          body: child,
-          floatingActionButton: const AssistantBubble(),
-        );
-      },
-      routes: [
-        GoRoute(path: '/', ...),
-        GoRoute(path: '/voice-memo', ...),
-        GoRoute(path: '/radio', ...),
-        // ... nested routes that show the FAB
-      ],
-    )
-  ]
-)
-```
+*   **Zero-Barrier Principle:** Minimum 48dp touch targets, minimum 16sp text.
+*   **Persistent Global "Bạn đồng hành" Bubble:** Draggable overlay button appearing across all screens in the app with edge-snapping, direct two-way speech, and spoken voice tool navigation via Gemini Live API.
+*   **SOS Safety:** 3-second continuous hold with haptic feedback to prevent accidental triggers.
+*   **Responsive:** All screens adapt smoothly to tablet viewports (768px+) via `ResponsiveUtils`.

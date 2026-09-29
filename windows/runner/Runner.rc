@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "lotus_haven" "\0"
+            VALUE "FileDescription", "emoheal" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "lotus_haven" "\0"
+            VALUE "InternalName", "emoheal" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "lotus_haven.exe" "\0"
-            VALUE "ProductName", "lotus_haven" "\0"
+            VALUE "OriginalFilename", "emoheal.exe" "\0"
+            VALUE "ProductName", "emoheal" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

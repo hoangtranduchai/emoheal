@@ -25,10 +25,7 @@ class EmergencyContactChip extends StatelessWidget {
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          constraints: const BoxConstraints(
-            minWidth: 120,
-            minHeight: 80,
-          ),
+          width: 155,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -64,7 +61,7 @@ class EmergencyContactChip extends StatelessWidget {
                       name,
                       style: const TextStyle(
                         fontFamily: 'Roboto',
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w500,
                         color: AppColors.textPrimary,
                       ),
@@ -83,13 +80,18 @@ class EmergencyContactChip extends StatelessWidget {
                     color: AppColors.primaryGreen,
                   ),
                   SizedBox(width: 4),
-                  Text(
-                    'Gọi ngay',
-                    style: TextStyle(
-                      fontFamily: 'Roboto',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.primaryGreen,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Gọi ngay',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
                     ),
                   ),
                 ],

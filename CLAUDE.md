@@ -1,34 +1,36 @@
-# CLAUDE.md — LotusHaven "Điểm Tựa"
+# CLAUDE.md — EmoHeal ("Vòng tay thấu cảm")
 
 ## 1. Project Overview
 
-LotusHaven is a cross-platform Flutter app providing mental health support for Vietnamese war veterans and elderly users. It features voice-first AI companionship, guided breathing (Lotus Breath), nostalgic radio, and voice memoir recording. The core UX principle is **Zero-Barrier**: all interactions are designed for users with limited tech literacy, trembling hands, and low vision.
+**EmoHeal** ("Vòng tay thấu cảm") is a cross-platform Flutter app providing mental health support for Vietnamese war veterans and elderly users through **Speech Emotion Recognition (SER)** and empathetic AI companionship. It features real-time acoustic prosody & semantic emotion analysis (6 states), guided lotus breathing, nostalgic radio, and voice memoir recording. The core UX principle is **Zero-Barrier**: all interactions are designed for users with limited tech literacy, trembling hands, and low vision.
 
 ## 2. Tech Stack
 
-| Layer | Technology | Version |
+| Layer | Technology | Version / Model |
 |---|---|---|
 | Frontend | Flutter (Dart) | SDK ≥3.3.0 |
-| State | flutter_riverpod | ^2.6.1 |
-| Routing | go_router | ^14.8.1 |
-| Database & Auth | Supabase (PostgreSQL) | supabase_flutter ^2.17.1 |
+| Navigation | AppRouter (Fade Transitions) | Clean Architecture |
+| Local Storage | SharedPreferences (Offline-first) | ^2.3.2 |
+| Database & Cloud | Supabase (PostgreSQL 15) | supabase_flutter ^2.17.1 |
 | Backend API | Python FastAPI | 0.115.0 |
-| AI/LLM | Google Gemini Flash | google-generativeai 0.8.0 |
-| STT | faster-whisper (PhoWhisper) | 1.1.0 |
-| TTS | edge-tts (vi-VN-HoaiMyNeural) | 6.1.12 |
+| Real-Time Voice AI | Gemini Live API (Native Audio) | `gemini-3.1-flash-live-preview` |
+| Text & Audio AI | Google GenAI SDK (Multimodal SER) | `gemini-3.7-flash` / `gemini-3.5-flash-lite` |
+| TTS | edge-tts (MD5 Memory Cache) | 6.1.12 (`vi-VN-HoaiMyNeural` & `vi-VN-NamMinhNeural`) |
 
 ## 3. Dev Commands
 
 ```bash
 # Flutter (Frontend)
 flutter pub get                  # Install dependencies / Cài dependencies
-flutter analyze --no-fatal-infos # Lint check / Kiểm tra lint
+dart analyze lib                 # Lint check / Kiểm tra lint
+flutter test                     # Run widget tests / Chạy unit/widget test
 flutter run -d chrome            # Run web dev / Chạy trên web
 flutter run                      # Run on connected device / Chạy trên thiết bị
 
 # Backend (Python)
 cd backend
 pip install -r requirements.txt  # Install backend deps / Cài deps backend
+pytest test_main.py              # Run backend tests / Chạy test backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000  # Run dev server
 
 # Git (GitHub Flow — NEVER commit to main directly)
@@ -38,16 +40,18 @@ git checkout -b bug/your-bugfix       # Create bug branch
 
 ## 4. Core Logic Summary
 
-- **AI Assistant**: Voice-first overlay. Records audio → STT (faster-whisper) → Gemini Flash classifies intent (PANIC/NAVIGATE/CHAT) → generates empathetic response → TTS (edge-tts) → plays audio. See [AI Architecture](.claude/docs/ai_architecture.md).
-- **Auth**: Email/Password (priority 1), Magic Link (priority 2), Google Sign-In (priority 3). Custom Access Token Hook injects `user_role` into JWT for O(1) RLS checks.
-- **Responsive**: All 11 mobile screens must responsive to tablet (768px+). Use `ResponsiveUtils.isTablet(context)`.
+- **Speech Emotion Recognition (SER) & Voice AI**: Multi-tier SER analyzing acoustic prosody (pitch, energy, tempo, tremor) + semantic sentiment to classify 6 emotion states: `PANIC_STRESS`, `SADNESS`, `NOSTALGIA`, `CALM`, `HAPPINESS`, `NEUTRAL`. Two modes: (1) Bidirectional WebSocket `/ws/live-assistant` powered by `gemini-3.1-flash-live-preview` with VAD, Barge-in, and Function Calling; (2) REST API `/api/assistant` powered directly by `gemini-3.7-flash` Multimodal Audio (no Whisper/PyTorch server dependency) + Edge-TTS. See [AI Architecture](.claude/docs/ai_architecture.md).
+- **Auth & Zero Barrier**: Instant Guest Mode with offline-first local storage (`SharedPreferences`). Phone authentication via 4-digit OTP ($0 Budget). Auto-syncs local data to cloud on login.
+- **Privacy & Conversation**: Option A (Session-based / Ephemeral chat in RAM). Conversations exist only during active screen session to protect privacy.
+- **Responsive**: All 10 mobile screens responsive to tablet (768px+). Use `ResponsiveUtils.isTablet(context)`.
+
 
 ## 5. Key Constraints
 
 > **DO NOT** change or assume any of these without explicit user approval:
 
 1. **Budget = $0**. All services must use free tiers only.
-2. **No "Góc bình yên" screen**. It was removed from scope.
+2. **No "Góc bình yên" or "ChatScreen"**. Removed from scope (conversations unified in "Hồi ký Giọng nói" and "Bạn đồng hành" live voice).
 3. **No Community Forum**. Cut from MVP.
 4. **Vietnamese only**. All UI text, error messages, TTS use Vietnamese. Comments bilingual (EN + VI).
 5. **Touch targets ≥ 48dp**. Non-negotiable for elderly accessibility.

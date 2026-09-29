@@ -2,13 +2,34 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
+import '../../core/voice_guide.dart';
 import '../../router.dart';
 
-class OnboardingScreen extends StatelessWidget {
+class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
   static const String backgroundImageUrl =
       'assets/images/onboarding_bg.png';
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Tự động phát giọng đọc chào mừng ngay khi mở app
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      VoiceGuide.play(VoiceScripts.onboarding);
+    });
+  }
+
+  @override
+  void dispose() {
+    VoiceGuide.stop();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +53,7 @@ class OnboardingScreen extends StatelessWidget {
             right: 0,
             height: imageHeight,
             child: Image.asset(
-              backgroundImageUrl,
+              OnboardingScreen.backgroundImageUrl,
               fit: BoxFit.cover,
               alignment: Alignment.topCenter,
               errorBuilder: (context, error, stackTrace) {
@@ -110,7 +131,8 @@ class OnboardingScreen extends StatelessWidget {
                     height: 68,
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.of(context).pushReplacementNamed(AppRoutes.authWelcome);
+                        VoiceGuide.stop();
+                        Navigator.of(context).pushReplacementNamed(AppRoutes.authLogin);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryGreen,

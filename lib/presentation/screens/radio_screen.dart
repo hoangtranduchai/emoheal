@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import '../../core/logger.dart';
+import '../../core/sound_coordinator.dart';
 import '../../core/theme.dart';
+import '../../core/voice_guide.dart';
 import '../../data/supabase_service.dart';
-import '../widgets/sos_button.dart';
 
 class RadioScreen extends StatefulWidget {
   const RadioScreen({super.key});
@@ -80,10 +82,37 @@ class _RadioScreenState extends State<RadioScreen> {
     ),
   ];
 
+  List<_Track> get _activeTracks {
+    if (_stations.isNotEmpty) {
+      return _stations.map((s) {
+        final genre = s['genre']?.toString();
+        String artist = 'Giai điệu quê hương';
+        if (genre == 'tho') {
+          artist = 'Giọng đọc Truyền cảm';
+        } else if (genre == 'nhac_cach_mang') {
+          artist = 'Đoàn Văn công Quân đội';
+        } else if (genre == 'dan_ca') {
+          artist = 'Nghệ nhân Dân gian';
+        }
+        return _Track(
+          title: s['name']?.toString() ?? 'Đài Radio',
+          artist: artist,
+          length: '15:00',
+          url: s['stream_url']?.toString() ?? 'https://archive.org/download/vietnamese-traditional-music/danca_bacninh.mp3',
+        );
+      }).toList();
+    }
+    return _tracks;
+  }
+
   @override
   void initState() {
     super.initState();
+    SoundCoordinator.registerRadioPlayer(_audioPlayer);
     _loadStations();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      VoiceGuide.play(VoiceScripts.radio);
+    });
 
     _audioPlayer.onPositionChanged.listen((p) {
       if (mounted) {
@@ -110,51 +139,73 @@ class _RadioScreenState extends State<RadioScreen> {
   }
 
   Future<void> _loadStations() async {
+    AppLogger.d('Bắt đầu tải danh sách đài Radio từ Supabase', tag: 'RADIO');
     try {
       final stations = await _supabaseService.getRadioStations();
       if (stations.isNotEmpty && mounted) {
+        AppLogger.i('Tải thành công ${stations.length} kênh radio từ Supabase', tag: 'RADIO');
         setState(() {
           _stations = stations;
-          _currentTitle = stations[0]['name'] ?? _tracks[0].title;
+          _currentTitle = stations[0]['name']?.toString() ?? _tracks[0].title;
           _isLoading = false;
         });
       } else {
+        AppLogger.d('Sử dụng danh sách bài phát mặc định', tag: 'RADIO');
         if (mounted) setState(() => _isLoading = false);
       }
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.w('Không thể tải kênh từ DB, chuyển sang danh sách bài hát mặc định', tag: 'RADIO', error: e, stackTrace: st);
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   void dispose() {
+    AppLogger.d('Hủy trình phát Radio', tag: 'RADIO');
+    SoundCoordinator.registerRadioPlayer(null);
+    VoiceGuide.stop();
     _audioPlayer.dispose();
     super.dispose();
   }
 
   Future<void> _playTrackAt(int index) async {
-    if (index < 0 || index >= _tracks.length) return;
+    VoiceGuide.stop();
+    final trackList = _activeTracks;
+    if (index < 0 || index >= trackList.length) return;
     _currentTrackIndex = index;
-    final track = _tracks[index];
+    final track = trackList[index];
 
-    setState(() {
-      _currentTitle = track.title;
-      _currentSubtitle = track.artist;
-    });
+    AppLogger.i('Phát bài Radio: "${track.title}" - ${track.artist} ($index)', tag: 'RADIO');
+    AppLogger.event('RADIO_PLAY_TRACK', params: {'title': track.title, 'url': track.url});
+
+    if (mounted) {
+      setState(() {
+        _currentTitle = track.title;
+        _currentSubtitle = track.artist;
+      });
+    }
 
     try {
       await _audioPlayer.stop();
+      if (!mounted) return;
       await _audioPlayer.play(UrlSource(track.url));
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.e('Lỗi khi phát luồng Radio: ${track.url}', tag: 'RADIO', error: e, stackTrace: st);
       // Fallback state if URL stream offline
-      setState(() => _isPlaying = true);
+      if (mounted) {
+        setState(() => _isPlaying = true);
+      }
     }
   }
 
   Future<void> _togglePlayPause() async {
     if (_isPlaying) {
+      AppLogger.d('Tạm dừng Radio', tag: 'RADIO');
+      AppLogger.event('RADIO_PAUSE');
       await _audioPlayer.pause();
     } else {
+      AppLogger.d('Tiếp tục phát Radio', tag: 'RADIO');
+      AppLogger.event('RADIO_RESUME');
       if (_position > Duration.zero) {
         await _audioPlayer.resume();
       } else {
@@ -164,7 +215,8 @@ class _RadioScreenState extends State<RadioScreen> {
   }
 
   Future<void> _nextTrack() async {
-    final nextIndex = (_currentTrackIndex + 1) % _tracks.length;
+    final trackList = _activeTracks;
+    final nextIndex = (_currentTrackIndex + 1) % trackList.length;
     await _playTrackAt(nextIndex);
   }
 
@@ -218,7 +270,7 @@ class _RadioScreenState extends State<RadioScreen> {
                             'Chọn thể loại, phát nhạc và thư giãn chậm rãi',
                             style: TextStyle(
                               fontFamily: 'Roboto',
-                              fontSize: 14,
+                              fontSize: 16,
                               fontWeight: FontWeight.w400,
                               color: AppColors.neutralGrey,
                             ),
@@ -265,7 +317,7 @@ class _RadioScreenState extends State<RadioScreen> {
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
-                        height: 150,
+                        height: 245,
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: _categories.length,
@@ -290,30 +342,31 @@ class _RadioScreenState extends State<RadioScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      ListView.separated(
-                        itemCount: _tracks.length,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        separatorBuilder: (context, index) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final track = _tracks[index];
-                          final isSelected = index == _currentTrackIndex;
-                          return _TrackTile(
-                            track: track,
-                            index: index + 1,
-                            isSelected: isSelected,
-                            onTap: () => _playTrackAt(index),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 18),
-                      const Center(
-                        child: SizedBox(
-                          width: 200,
-                          height: 200,
-                          child: SOSButton(size: 100),
+                      if (_isLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          itemCount: _activeTracks.length,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          separatorBuilder: (context, index) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final track = _activeTracks[index];
+                            final isSelected = index == _currentTrackIndex;
+                            return _TrackTile(
+                              track: track,
+                              index: index + 1,
+                              isSelected: isSelected,
+                              onTap: () => _playTrackAt(index),
+                            );
+                          },
                         ),
-                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -391,7 +444,7 @@ class _PlayerCard extends StatelessWidget {
                       'Đang phát',
                       style: TextStyle(
                         fontFamily: 'Roboto',
-                        fontSize: 13,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primaryGreen,
                       ),
@@ -415,7 +468,7 @@ class _PlayerCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontFamily: 'Roboto',
-                        fontSize: 13,
+                        fontSize: 16,
                         fontWeight: FontWeight.w400,
                         color: AppColors.neutralGrey,
                       ),
@@ -447,7 +500,7 @@ class _PlayerCard extends StatelessWidget {
                 currentPositionText,
                 style: const TextStyle(
                   fontFamily: 'Roboto',
-                  fontSize: 12,
+                  fontSize: 16,
                   fontWeight: FontWeight.w500,
                   color: AppColors.neutralGrey,
                 ),
@@ -456,7 +509,7 @@ class _PlayerCard extends StatelessWidget {
                 durationText,
                 style: const TextStyle(
                   fontFamily: 'Roboto',
-                  fontSize: 12,
+                  fontSize: 16,
                   fontWeight: FontWeight.w500,
                   color: AppColors.neutralGrey,
                 ),
@@ -550,8 +603,8 @@ class _CategoryCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(22),
       child: Container(
-        width: 156,
-        padding: const EdgeInsets.all(16),
+        width: 185,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(22),
@@ -565,45 +618,54 @@ class _CategoryCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: category.color.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(category.icon, color: category.color),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: category.color.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(category.icon, color: category.color),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  category.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  category.subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.neutralGrey,
+                    height: 1.3,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              category.title,
-              style: const TextStyle(
-                fontFamily: 'Roboto',
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              category.subtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Roboto',
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: AppColors.neutralGrey,
-                height: 1.3,
-              ),
-            ),
-            const Spacer(),
+            const SizedBox(height: 8),
             Text(
               category.duration,
               style: const TextStyle(
                 fontFamily: 'Roboto',
-                fontSize: 12,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: AppColors.primaryGreen,
               ),
@@ -652,7 +714,7 @@ class _TrackTile extends StatelessWidget {
                 '$index',
                 style: TextStyle(
                   fontFamily: 'Roboto',
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: isSelected ? Colors.white : AppColors.primaryGreen,
                 ),
@@ -669,7 +731,7 @@ class _TrackTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontFamily: 'Roboto',
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                       color: AppColors.ink,
                     ),
@@ -679,7 +741,7 @@ class _TrackTile extends StatelessWidget {
                     track.artist,
                     style: const TextStyle(
                       fontFamily: 'Roboto',
-                      fontSize: 13,
+                      fontSize: 16,
                       fontWeight: FontWeight.w400,
                       color: AppColors.neutralGrey,
                     ),
@@ -691,7 +753,7 @@ class _TrackTile extends StatelessWidget {
               track.length,
               style: const TextStyle(
                 fontFamily: 'Roboto',
-                fontSize: 13,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: AppColors.primaryGreen,
               ),

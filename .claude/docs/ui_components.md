@@ -1,6 +1,6 @@
 # UI Components & Design System
 
-The LotusHaven app follows a specific design system tailored for accessibility, especially for elderly users. 
+The EmoHeal app follows a specific design system tailored for accessibility, especially for elderly users. 
 
 **Figma Reference:** `CzfLAPE2JITOhRM3HdrBbe`
 
@@ -31,14 +31,13 @@ The palette is designed to be calming, high-contrast, and clear.
 
 Reusable components built to maintain consistency across the app.
 
-1.  **`AssistantBubble`**: The 64x64 FAB utilizing `support.gif`. Appears on all screens via a persistent shell route.
-2.  **`SOSButton`**: A critical UI component. Features a 3-layer ripple effect. Requires a **3-second hold** to activate (calls 115 or family) to prevent accidental triggers.
-3.  **`FeatureCard`**: Used on the Home screen for primary navigation (Hồi ký, Nhịp thở, Radio, Cài đặt). Large touch area.
-4.  **`ChatHistoryItem`**: A shared list item component for previous conversations.
-5.  **`TopicSuggestionCard`**: A grid of 6 cards used in the Voice Memo screen to prompt memories.
-6.  **`RecordingControls`**: A complex stateful widget managing 7 states: idle, recording, paused, playing, stopped, loading, error.
-7.  **`RadioPlayerBar`**: Persistent or inline bar showing play/pause, progress, and current track metadata.
-8.  **`AppButton`**: The unified button component, enforcing the `56dp` height standard, heavily used in Auth screens.
+1.  **`AssistantBubble`**: The 64x64 global button with `support.gif` and "Bạn đồng hành" badge. Provides instant two-way voice interaction and app voice control via Gemini Live API.
+2.  **`SOSButton`**: Critical emergency component. Features 3-second hold countdown, haptic vibrations, Priority 1 emergency contact lookup, and 115 auto-dialer fallback.
+3.  **`FeatureCard`**: Used on the Home screen for primary navigation (Hồi ký, Nhịp thở, Radio, Cài đặt) with large touch targets.
+4.  **`EmergencyContactChip`**: Compact horizontal chip for displaying and managing quick-dial emergency contacts on the Home screen.
+5.  **`AddContactBottomSheet`**: Accessible modal sheet for adding emergency contacts (name and phone) with clear input fields.
+6.  **`BreathingLotus`**: Smooth lotus flower blooming animation and video playback synced with 4-4-6 breathing cycles, featuring high-contrast white animated guidance subtitles ("Bác hãy hít vào", "Bác nín thở một chút nhé", "Bác hãy từ từ thở ra") positioned elegantly at the bottom with drop shadows and smooth transitions.
+
 
 ## Responsive Design
 
