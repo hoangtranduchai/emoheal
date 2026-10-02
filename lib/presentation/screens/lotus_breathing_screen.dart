@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/logger.dart';
 import '../../core/theme.dart';
+import '../../core/voice_command_bus.dart';
 import '../../core/voice_guide.dart';
 import '../widgets/breathing_lotus.dart';
 
@@ -17,6 +19,7 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
+  StreamSubscription<VoiceBreathingCommand>? _breathingCmdSub;
   
   String _lotusSubtitle = 'Bác hãy hít vào';
   int _currentPhase = 1;
@@ -27,6 +30,7 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen>
     super.initState();
     AppLogger.i('Bắt đầu phiên "Nhịp thở Hoa Sen" (Chu kỳ thở 4-4-6)', tag: 'BREATHING');
     AppLogger.event('LOTUS_BREATHING_START');
+    _breathingCmdSub = VoiceCommandBus().breathingCommands.listen(_handleVoiceCommand);
 
     _controller = AnimationController(
       vsync: this,
@@ -125,8 +129,38 @@ class _LotusBreathingScreenState extends State<LotusBreathingScreen>
     }
   }
 
+  void _handleVoiceCommand(VoiceBreathingCommand cmd) {
+    if (!mounted) return;
+    AppLogger.i('LotusBreathingScreen nhận lệnh giọng nói: ${cmd.action}', tag: 'BREATHING');
+    switch (cmd.action) {
+      case VoiceBreathingAction.start:
+      case VoiceBreathingAction.resume:
+        if (!_controller.isAnimating) {
+          setState(() {
+            _isIntroFinished = true;
+          });
+          _controller.repeat();
+        }
+        break;
+      case VoiceBreathingAction.pause:
+        if (_controller.isAnimating) {
+          _controller.stop();
+        }
+        break;
+      case VoiceBreathingAction.stop:
+        _controller.stop();
+        _controller.reset();
+        setState(() {
+          _currentPhase = 1;
+          _lotusSubtitle = 'Bác hãy hít vào';
+        });
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    _breathingCmdSub?.cancel();
     VoiceGuide.stop();
     _controller.removeListener(_updateBreathingState);
     _controller.dispose();

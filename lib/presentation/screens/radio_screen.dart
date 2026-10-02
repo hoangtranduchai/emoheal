@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../core/logger.dart';
 import '../../core/sound_coordinator.dart';
 import '../../core/theme.dart';
+import '../../core/voice_command_bus.dart';
 import '../../core/voice_guide.dart';
 import '../../data/supabase_service.dart';
 
@@ -17,6 +18,7 @@ class RadioScreen extends StatefulWidget {
 class _RadioScreenState extends State<RadioScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final SupabaseService _supabaseService = SupabaseService();
+  StreamSubscription<VoiceRadioCommand>? _radioCmdSub;
 
   double _progress = 0.0;
   bool _isPlaying = false;
@@ -109,6 +111,7 @@ class _RadioScreenState extends State<RadioScreen> {
   void initState() {
     super.initState();
     SoundCoordinator.registerRadioPlayer(_audioPlayer);
+    _radioCmdSub = VoiceCommandBus().radioCommands.listen(_handleVoiceCommand);
     _loadStations();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       VoiceGuide.play(VoiceScripts.radio);
@@ -162,6 +165,7 @@ class _RadioScreenState extends State<RadioScreen> {
   @override
   void dispose() {
     AppLogger.d('Hủy trình phát Radio', tag: 'RADIO');
+    _radioCmdSub?.cancel();
     SoundCoordinator.registerRadioPlayer(null);
     VoiceGuide.stop();
     _audioPlayer.dispose();
@@ -218,6 +222,79 @@ class _RadioScreenState extends State<RadioScreen> {
     final trackList = _activeTracks;
     final nextIndex = (_currentTrackIndex + 1) % trackList.length;
     await _playTrackAt(nextIndex);
+  }
+
+  Future<void> _previousTrack() async {
+    final trackList = _activeTracks;
+    final prevIndex = (_currentTrackIndex - 1 + trackList.length) % trackList.length;
+    await _playTrackAt(prevIndex);
+  }
+
+  void _handleVoiceCommand(VoiceRadioCommand cmd) {
+    if (!mounted) return;
+    AppLogger.i('RadioScreen xử lý lệnh giọng nói: ${cmd.action}', tag: 'RADIO');
+    switch (cmd.action) {
+      case VoiceRadioAction.play:
+      case VoiceRadioAction.resume:
+        if (!_isPlaying) {
+          _togglePlayPause();
+        }
+        break;
+      case VoiceRadioAction.pause:
+      case VoiceRadioAction.stop:
+        if (_isPlaying) {
+          _togglePlayPause();
+        }
+        break;
+      case VoiceRadioAction.next:
+        _nextTrack();
+        break;
+      case VoiceRadioAction.prev:
+        _previousTrack();
+        break;
+      case VoiceRadioAction.selectGenre:
+        _selectGenreByVoice(cmd.genre, cmd.trackTitle);
+        break;
+    }
+  }
+
+  void _selectGenreByVoice(String? genre, String? title) {
+    final trackList = _activeTracks;
+    if (trackList.isEmpty) return;
+
+    final target = (genre ?? title ?? '').toLowerCase().trim();
+    if (target.isEmpty) return;
+
+    int matchIndex = -1;
+    for (int i = 0; i < trackList.length; i++) {
+      final t = trackList[i];
+      if (t.title.toLowerCase().contains(target) || t.artist.toLowerCase().contains(target)) {
+        matchIndex = i;
+        break;
+      }
+    }
+
+    if (matchIndex == -1) {
+      if (target.contains('cách mạng') || target.contains('cach mang') || target.contains('quân đội')) {
+        matchIndex = trackList.indexWhere((t) =>
+            t.title.toLowerCase().contains('cách mạng') || t.artist.toLowerCase().contains('quân đội'));
+      } else if (target.contains('tài tử') || target.contains('tai tu') || target.contains('nam bộ')) {
+        matchIndex = trackList.indexWhere((t) =>
+            t.title.toLowerCase().contains('tài tử') || t.artist.toLowerCase().contains('phương nam'));
+      } else if (target.contains('thơ') || target.contains('tho') || target.contains('đất nước')) {
+        matchIndex = trackList.indexWhere((t) =>
+            t.title.toLowerCase().contains('thơ') || t.title.toLowerCase().contains('đất nước'));
+      } else if (target.contains('dân ca') || target.contains('dan ca') || target.contains('quan họ')) {
+        matchIndex = trackList.indexWhere((t) =>
+            t.title.toLowerCase().contains('quan họ') || t.title.toLowerCase().contains('dân ca'));
+      }
+    }
+
+    if (matchIndex != -1) {
+      _playTrackAt(matchIndex);
+    } else {
+      _playTrackAt(0);
+    }
   }
 
   String _formatDuration(Duration d) {

@@ -12,24 +12,37 @@ Bác là cựu chiến binh/thương binh, có thể gặp khó khăn về công
 Xưng hô: Luôn gọi người dùng là "bác" (hoặc kèm tên nếu có), tự xưng là "cháu".
 Tuyệt đối KHÔNG BAO GIỜ nói "Tôi là AI" hay nhắc đến việc bạn là máy móc. Luôn giữ thái độ tôn kính, ân cần, ấm áp, hiếu nghĩa.
 
-Nhiệm vụ: Phân tích trạng thái cảm xúc (Speech Emotion Recognition - SER) kết hợp tâm lý học hành vi và đưa ra phản hồi xoa dịu phù hợp.
+Nhiệm vụ: Phân tích trạng thái cảm xúc (Speech Emotion Recognition - SER) kết hợp điều khiển ứng dụng EmoHeal và đưa ra phản hồi xoa dịu phù hợp.
 
 Bạn phải trả lời dưới dạng JSON với cấu trúc sau:
 {
   "emotion": "PANIC_STRESS" | "SADNESS" | "NOSTALGIA" | "CALM" | "HAPPINESS" | "NEUTRAL",
   "emotion_confidence": 0.0 đến 1.0,
-  "intent": "PANIC" | "NAVIGATE" | "CHAT",
+  "intent": "PANIC" | "NAVIGATE" | "CONTROL" | "SOS" | "CHAT",
   "text": "Câu trả lời ấm áp, ân cần của cháu (2-4 câu ngắn gọn, dễ hiểu)",
-  "target": "breathing" | "radio" | "voice-memo" | "settings" | "home" | null
+  "target": "breathing" | "radio" | "voice-memo" | "settings" | "home" | "history" | "sos" | null,
+  "action": "play" | "pause" | "next" | "prev" | "resume" | "start_breathing" | "pause_breathing" | "start_recording" | "save_recording" | "font_increase" | "font_decrease" | "sos_trigger" | null
 }
 
 Quy tắc phân loại cảm xúc & intent:
-1. PANIC_STRESS: Bác biểu hiện hoảng loạn, sợ hãi, khó thở, tức ngực, đau đớn, sang chấn PTSD -> intent = "PANIC", target = "breathing" (kích hoạt Nhịp thở Hoa Sen 4-4-6).
-2. SADNESS: Bác buồn bã, cô đơn, u uất, suy sụp -> intent = "CHAT", target = null hoặc "radio" (an ủi, gợi ý nghe radio ngâm thơ, dân ca).
-3. NOSTALGIA: Bác hồi tưởng ký ức chiến trường, nhớ đồng đội, tâm sự chuyện xưa -> intent = "CHAT", target = "voice-memo" hoặc null.
-4. CALM: Bác tĩnh tâm, bình an, thư thái -> intent = "CHAT", target = null.
-5. HAPPINESS: Bác vui vẻ, phấn khởi, cười nói -> intent = "CHAT", target = null.
-6. NEUTRAL: Hội thoại thông thường, hỏi giờ, điều hướng chức năng -> intent = "NAVIGATE" (nếu yêu cầu mở trang) hoặc "CHAT".
+1. PANIC_STRESS: Bác hoảng loạn, sợ hãi, khó thở, tức ngực, đau đớn, sang chấn PTSD -> intent = "PANIC", target = "breathing", action = "start_breathing" (kích hoạt Nhịp thở Hoa Sen 4-4-6).
+2. SADNESS: Bác buồn bã, cô đơn, u uất, suy sụp -> intent = "CHAT", target = null hoặc "radio".
+3. NOSTALGIA: Bác hồi tưởng ký ức chiến trường, nhớ đồng đội, tâm sự chuyện xưa -> intent = "CHAT", target = "voice-memo".
+4. CALM / HAPPINESS: Bác bình an, thư thái hoặc vui vẻ -> intent = "CHAT".
+5. Điều khiển & Điều hướng (CONTROL / NAVIGATE):
+   - Mở đài: target = "radio", action = "play".
+   - Chuyển bài: target = "radio", action = "next".
+   - Bài trước: target = "radio", action = "prev".
+   - Dừng đài: target = "radio", action = "pause".
+   - Bắt đầu tập thở: target = "breathing", action = "start_breathing".
+   - Thu âm hồi ký: target = "voice-memo", action = "start_recording".
+   - Lưu hồi ký: target = "voice-memo", action = "save_recording".
+   - Chữ to lên: target = "settings", action = "font_increase".
+   - Chữ nhỏ lại: target = "settings", action = "font_decrease".
+   - Về trang chủ: target = "home".
+   - Lịch sử hồi ký: target = "history".
+6. Kêu cứu khẩn cấp (SOS):
+   - Bác kêu cứu, bị ngã, tai nạn, gọi 115 -> intent = "SOS", target = "sos", action = "sos_trigger".
 
 CHỈ trả về JSON chuẩn, KHÔNG thêm markdown hay text nào khác."""
 
@@ -174,10 +187,13 @@ def get_assistant_response(text: str, history: Optional[List[Dict[str, Any]]] = 
         raw_target = parsed.get("target")
         target = raw_target if isinstance(raw_target, str) and raw_target.strip() else None
 
+        raw_action = parsed.get("action")
+        action = raw_action if isinstance(raw_action, str) and raw_action.strip() else None
+
         total_time_ms = (time.time() - t_start) * 1000
         logger.info(
             f"🎯 [SER TEXT] Phân loại cảm xúc & Intent thành công ({total_time_ms:.1f}ms): "
-            f"Emotion={emotion} ({emotion_confidence:.2f}), Intent={intent}, Target={target}, "
+            f"Emotion={emotion} ({emotion_confidence:.2f}), Intent={intent}, Target={target}, Action={action}, "
             f"Text=\"{ai_text}\""
         )
 
@@ -187,6 +203,7 @@ def get_assistant_response(text: str, history: Optional[List[Dict[str, Any]]] = 
             "intent": intent,
             "text": ai_text,
             "target": target,
+            "action": action,
         }
     except Exception as parse_err:
         logger.warning(f"⚠️ Không thể parse JSON từ phản hồi LLM ({parse_err}), dùng raw text fallback: {raw}")
@@ -215,18 +232,29 @@ Bạn phải trả lời dưới dạng JSON với cấu trúc:
   "transcription": "Chính xác câu nói của Bác bằng tiếng Việt có dấu",
   "emotion": "PANIC_STRESS" | "SADNESS" | "NOSTALGIA" | "CALM" | "HAPPINESS" | "NEUTRAL",
   "emotion_confidence": 0.0 đến 1.0,
-  "intent": "PANIC" | "NAVIGATE" | "CHAT",
+  "intent": "PANIC" | "NAVIGATE" | "CONTROL" | "SOS" | "CHAT",
   "text": "Câu trả lời của cháu dành cho Bác (ngắn gọn, ấm áp)",
-  "target": "breathing" | "radio" | "voice-memo" | "settings" | "home" | null
+  "target": "breathing" | "radio" | "voice-memo" | "settings" | "home" | "history" | "sos" | null,
+  "action": "play" | "pause" | "next" | "prev" | "resume" | "start_breathing" | "pause_breathing" | "start_recording" | "save_recording" | "font_increase" | "font_decrease" | "sos_trigger" | null
 }
 
 Quy tắc phân loại cảm xúc & hành động:
-- PANIC_STRESS: Giọng run, thở dốc, nghẹn ngào, hoảng loạn, đau, lo âu -> intent = "PANIC", target = "breathing" (mở Nhịp thở Hoa Sen 4-4-6).
-- SADNESS: Giọng chùng xuống, chậm, buồn bã, u uất -> intent = "CHAT", target = null hoặc "radio" (an ủi, gợi ý nghe radio).
-- NOSTALGIA: Giọng chậm rãi, kể chuyện chiến trường, nhớ đồng đội -> intent = "CHAT", target = "voice-memo" hoặc null.
-- CALM: Giọng đều đặn, thư thái, nhẹ nhàng -> intent = "CHAT", target = null.
-- HAPPINESS: Giọng tươi vui, hào sảng, phấn khởi -> intent = "CHAT", target = null.
-- NEUTRAL: Giọng bình thường, hỏi đáp hoặc yêu cầu mở tính năng -> intent = "NAVIGATE" / "CHAT".
+- PANIC_STRESS: Giọng run, thở dốc, nghẹn ngào, hoảng loạn, đau, lo âu -> intent = "PANIC", target = "breathing", action = "start_breathing" (mở Nhịp thở Hoa Sen 4-4-6).
+- SADNESS: Giọng chùng xuống, chậm, buồn bã, u uất -> intent = "CHAT", target = null hoặc "radio".
+- NOSTALGIA: Giọng chậm rãi, kể chuyện chiến trường, nhớ đồng đội -> intent = "CHAT", target = "voice-memo".
+- CALM / HAPPINESS: Giọng bình thường, nhẹ nhàng hoặc vui vẻ -> intent = "CHAT".
+- Điều khiển & Điều hướng (CONTROL / NAVIGATE):
+  + Mở đài: target = "radio", action = "play".
+  + Chuyển bài: target = "radio", action = "next".
+  + Bài trước: target = "radio", action = "prev".
+  + Dừng đài: target = "radio", action = "pause".
+  + Bắt đầu tập thở: target = "breathing", action = "start_breathing".
+  + Thu âm hồi ký: target = "voice-memo", action = "start_recording".
+  + Lưu hồi ký: target = "voice-memo", action = "save_recording".
+  + Chữ to lên: target = "settings", action = "font_increase".
+  + Chữ nhỏ lại: target = "settings", action = "font_decrease".
+  + Về trang chủ: target = "home".
+- Kêu cứu khẩn cấp: Bác kêu cứu, bị ngã, gọi 115 -> intent = "SOS", target = "sos", action = "sos_trigger".
 
 CHỈ trả về JSON chuẩn, KHÔNG thêm text hay markdown bên ngoài."""
 
@@ -335,10 +363,13 @@ def get_assistant_response_from_audio(
         raw_target = parsed.get("target")
         target = raw_target if isinstance(raw_target, str) and raw_target.strip() else None
 
+        raw_action = parsed.get("action")
+        action = raw_action if isinstance(raw_action, str) and raw_action.strip() else None
+
         total_time_ms = (time.time() - t_start) * 1000
         logger.info(
             f"🎯 [GEMINI SER SUCCESS] ({total_time_ms:.1f}ms): "
-            f"Emotion={emotion} ({emotion_confidence:.2f}), Transcription=\"{transcription}\", Intent={intent}, Target={target}"
+            f"Emotion={emotion} ({emotion_confidence:.2f}), Transcription=\"{transcription}\", Intent={intent}, Target={target}, Action={action}"
         )
 
         return {
@@ -348,6 +379,7 @@ def get_assistant_response_from_audio(
             "intent": intent,
             "text": ai_text,
             "target": target,
+            "action": action,
         }
     except Exception as parse_err:
         logger.warning(f"⚠️ Lỗi parse JSON âm thanh ({parse_err}): {raw}")

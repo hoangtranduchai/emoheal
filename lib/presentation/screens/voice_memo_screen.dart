@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/logger.dart';
 import '../../core/responsive_utils.dart';
 import '../../core/theme.dart';
+import '../../core/voice_command_bus.dart';
 import '../../core/voice_guide.dart';
 import '../../data/api_service.dart';
 import '../../data/supabase_service.dart';
@@ -90,6 +91,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
   Timer? _timer;
   int _currentRecordDuration = 0;
   String? _currentAudioPath;
+  StreamSubscription<VoiceMemoCommand>? _memoCmdSub;
 
   // ── Topic Suggestions (Chủ đề gợi ý từ Figma) ──
   int _selectedTopicIndex = 0;
@@ -125,6 +127,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
   void initState() {
     super.initState();
     _loadVoiceSettings();
+    _memoCmdSub = VoiceCommandBus().memoCommands.listen(_handleVoiceCommand);
 
     // Khởi tạo tin nhắn chào / gợi ý ban đầu của Trợ lý AI
     _initFirstAssistantMessage();
@@ -149,6 +152,54 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
     });
   }
 
+  void _handleVoiceCommand(VoiceMemoCommand cmd) {
+    if (!mounted) return;
+    AppLogger.i('VoiceMemoScreen nhận lệnh giọng nói: ${cmd.action}', tag: 'VOICE-MEMO');
+    switch (cmd.action) {
+      case VoiceMemoAction.startRecording:
+        if (!_isRecording && !_isSending) {
+          _startRecording();
+        }
+        break;
+      case VoiceMemoAction.pauseRecording:
+        if (_isRecording) {
+          _togglePauseRecording();
+        }
+        break;
+      case VoiceMemoAction.stopAndSave:
+        if (_isRecording) {
+          _sendVoiceTurn();
+        }
+        break;
+      case VoiceMemoAction.changeTopic:
+        _handleTopicVoiceChange(cmd.topic);
+        break;
+    }
+  }
+
+  void _handleTopicVoiceChange(String? topicName) {
+    if (topicName == null || topicName.trim().isEmpty) return;
+    final lower = topicName.toLowerCase();
+    int targetIndex = -1;
+    if (lower.contains('đồng đội') || lower.contains('dong doi') || lower.contains('chiến trường') || lower.contains('chien truong')) {
+      targetIndex = 0;
+    } else if (lower.contains('con cháu') || lower.contains('con chau') || lower.contains('niềm vui') || lower.contains('niem vui')) {
+      targetIndex = 1;
+    } else if (lower.contains('tương lai') || lower.contains('tuong lai') || lower.contains('lá thư') || lower.contains('la thu')) {
+      targetIndex = 2;
+    }
+
+    if (targetIndex != -1 && targetIndex != _selectedTopicIndex) {
+      setState(() {
+        _selectedTopicIndex = targetIndex;
+        if (_messages.length <= 1) {
+          _messages.clear();
+          _initFirstAssistantMessage();
+        }
+      });
+    }
+  }
+
   void _initFirstAssistantMessage() {
     final topic = _topics[_selectedTopicIndex];
     _messages.add(
@@ -162,6 +213,7 @@ class _VoiceMemoScreenState extends State<VoiceMemoScreen>
 
   @override
   void dispose() {
+    _memoCmdSub?.cancel();
     VoiceGuide.stop();
     _timer?.cancel();
     _pulseController.dispose();

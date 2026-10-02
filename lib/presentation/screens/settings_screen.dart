@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../data/supabase_service.dart';
+import '../../core/logger.dart';
 import '../../core/theme.dart';
+import '../../core/voice_command_bus.dart';
 import '../../core/voice_guide.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,6 +16,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final SupabaseService _supabaseService = SupabaseService();
+  StreamSubscription<VoiceSettingsCommand>? _settingsCmdSub;
   
   bool _isLoading = true;
   bool _soundEnabled = true;
@@ -27,11 +31,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _settingsCmdSub = VoiceCommandBus().settingsCommands.listen(_handleVoiceCommand);
     _loadSettings();
     _loadDisplayName();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       VoiceGuide.play(VoiceScripts.settings);
     });
+  }
+
+  void _handleVoiceCommand(VoiceSettingsCommand cmd) {
+    if (!mounted) return;
+    AppLogger.i('SettingsScreen nhận lệnh giọng nói: $cmd', tag: 'SETTINGS');
+    setState(() {
+      if (cmd.fontDelta != null) {
+        _fontSizeScale = (_fontSizeScale + cmd.fontDelta!).clamp(1.0, 1.6);
+      }
+      if (cmd.voiceType != null && cmd.voiceType!.isNotEmpty) {
+        _voiceType = cmd.voiceType!;
+      }
+      if (cmd.soundEnabled != null) {
+        _soundEnabled = cmd.soundEnabled!;
+      }
+    });
+    _saveSettings();
   }
 
   Future<void> _loadDisplayName() async {
@@ -46,6 +68,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _settingsCmdSub?.cancel();
     _nameController.dispose();
     VoiceGuide.stop();
     super.dispose();

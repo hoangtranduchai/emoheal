@@ -1,8 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/logger.dart';
 import '../../core/theme.dart';
+import '../../core/voice_command_bus.dart';
 import '../../data/live_voice_service.dart';
+import '../../data/supabase_service.dart';
+import '../../router.dart';
 import 'assistant_bubble.dart';
 
 /// Nút "Bạn đồng hành" Toàn Cục (Global Draggable Assistant Button & AI Subtitle Box)
@@ -27,11 +32,20 @@ class _GlobalDraggableAssistantState extends State<GlobalDraggableAssistant> wit
   StreamSubscription<LiveVoiceState>? _stateSub;
   StreamSubscription<String>? _inputSub;
   StreamSubscription<String>? _outputSub;
+  StreamSubscription<VoiceNavigationCommand>? _navSub;
+  StreamSubscription<VoiceSosCommand>? _sosSub;
+  StreamSubscription<VoiceSettingsCommand>? _settingsSub;
 
   LiveVoiceState _voiceState = LiveVoiceState.idle;
   String _userTranscript = '';
   String _aiTranscript = '';
   bool _dismissedBanner = false;
+
+  // Trạng thái đếm ngược SOS khẩn cấp bằng giọng nói
+  bool _isSosActive = false;
+  int _sosCountdown = 3;
+  String _sosReason = '';
+  Timer? _sosTimer;
 
   static const double _bubbleWidth = 114.0;
   static const double _bubbleHeight = 92.0;
@@ -83,15 +97,129 @@ class _GlobalDraggableAssistantState extends State<GlobalDraggableAssistant> wit
         });
       }
     });
+
+    // Lắng nghe lệnh điều hướng toàn cục từ giọng nói
+    _navSub = VoiceCommandBus().navigationCommands.listen((cmd) {
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (!mounted) return;
+        final navState = AppRouter.navigatorKey.currentState;
+        if (cmd.targetRoute == AppRoutes.home) {
+          navState?.popUntil((route) => route.isFirst);
+        } else {
+          navState?.pushNamed(cmd.targetRoute);
+        }
+      });
+    });
+
+    // Lắng nghe lệnh kích hoạt khẩn cấp SOS bằng giọng nói
+    _sosSub = VoiceCommandBus().sosCommands.listen((cmd) {
+      if (mounted) {
+        _triggerSosEmergency(cmd.reason, cmd.countdownSeconds);
+      }
+    });
+
+    // Lắng nghe lệnh thay đổi cài đặt bằng giọng nói
+    _settingsSub = VoiceCommandBus().settingsCommands.listen((cmd) {
+      if (cmd.fontDelta != null) {
+        _handleFontDelta(cmd.fontDelta!);
+      }
+      if (cmd.voiceType != null) {
+        _handleVoiceType(cmd.voiceType!);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _navSub?.cancel();
+    _sosSub?.cancel();
+    _settingsSub?.cancel();
+    _sosTimer?.cancel();
     _stateSub?.cancel();
     _inputSub?.cancel();
     _outputSub?.cancel();
     _snapController.dispose();
     super.dispose();
+  }
+
+  void _triggerSosEmergency(String reason, int countdownSeconds) {
+    _sosTimer?.cancel();
+    setState(() {
+      _isSosActive = true;
+      _sosCountdown = countdownSeconds;
+      _sosReason = reason;
+    });
+
+    _sosTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_sosCountdown <= 1) {
+        timer.cancel();
+        setState(() {
+          _isSosActive = false;
+        });
+        _executeEmergencyCall();
+      } else {
+        setState(() {
+          _sosCountdown--;
+        });
+      }
+    });
+  }
+
+  void _cancelSosEmergency() {
+    _sosTimer?.cancel();
+    setState(() {
+      _isSosActive = false;
+    });
+    AppLogger.i('🛑 Bác đã bấm hủy cuộc gọi khẩn cấp SOS', tag: 'SOS');
+  }
+
+  Future<void> _executeEmergencyCall() async {
+    AppLogger.e('🚨 Hết 3 giây đếm ngược -> Bắt đầu quay số khẩn cấp!', tag: 'SOS');
+    String phoneToCall = '115';
+    try {
+      final contacts = await SupabaseService().getEmergencyContacts();
+      if (contacts.isNotEmpty) {
+        final firstPhone = contacts.first['contact_phone']?.toString();
+        if (firstPhone != null && firstPhone.trim().isNotEmpty) {
+          phoneToCall = firstPhone.trim();
+        }
+      }
+    } catch (_) {}
+
+    final cleanPhone = phoneToCall.replaceAll(RegExp(r'[^0-9+]'), '');
+    final uri = Uri.parse('tel:$cleanPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      AppLogger.e('Lỗi quay số gọi khẩn cấp: $e', tag: 'SOS');
+    }
+  }
+
+  Future<void> _handleFontDelta(double delta) async {
+    try {
+      final settings = await SupabaseService().getUserSettings();
+      double currentScale = (settings['font_size_scale'] as num?)?.toDouble() ?? 1.15;
+      double newScale = (currentScale + delta).clamp(1.0, 1.6);
+      await SupabaseService().saveUserSettings(fontSizeScale: newScale);
+      AppLogger.i('Cập nhật cỡ chữ qua giọng nói: $newScale', tag: 'SETTINGS');
+    } catch (e) {
+      AppLogger.w('Lỗi chỉnh cỡ chữ: $e', tag: 'SETTINGS');
+    }
+  }
+
+  Future<void> _handleVoiceType(String voiceType) async {
+    try {
+      await SupabaseService().saveUserSettings(voiceType: voiceType);
+      AppLogger.i('Cập nhật giọng đọc qua giọng nói: $voiceType', tag: 'SETTINGS');
+    } catch (e) {
+      AppLogger.w('Lỗi đổi giọng đọc: $e', tag: 'SETTINGS');
+    }
   }
 
   void _snapToNearestEdge(Size screenSize, EdgeInsets padding) {
@@ -259,6 +387,111 @@ class _GlobalDraggableAssistantState extends State<GlobalDraggableAssistant> wit
             ),
           ),
         ),
+
+        // ── 3. Khung Cảnh Báo Khẩn Cấp SOS (Đếm ngược 3 giây an toàn) ──
+        if (_isSosActive)
+          Positioned.fill(
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.65),
+              child: Center(
+                child: Container(
+                  width: math.min(360.0, screenSize.width - 32.0),
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.sosOrange, width: 3),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x66D97750),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: const BoxDecoration(
+                          color: AppColors.sosOrangeLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$_sosCountdown',
+                            style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.sosOrange,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'CẢNH BÁO KHẨN CẤP',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.sosOrange,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _sosReason.isNotEmpty ? _sosReason : 'Trợ lý đang kích hoạt cuộc gọi trợ giúp y tế...',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tự động gọi khẩn cấp sau $_sosCountdown giây...',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton.icon(
+                          onPressed: _cancelSosEmergency,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4A4A4A),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 4,
+                          ),
+                          icon: const Icon(Icons.close_rounded, size: 28),
+                          label: const Text(
+                            'HỦY GỌI KHẨN CẤP',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

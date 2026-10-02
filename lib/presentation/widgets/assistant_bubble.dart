@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/logger.dart';
 import '../../core/theme.dart';
+import '../../core/voice_command_bus.dart';
 import '../../data/live_voice_service.dart';
 import '../../data/supabase_service.dart';
-import '../../router.dart';
 
 /// Nút Bong bóng "Bạn đồng hành" / "Đang lắng nghe"
 /// Thiết kế chuẩn Zero-Barrier cho người cao tuổi:
@@ -92,82 +92,7 @@ class _AssistantBubbleState extends State<AssistantBubble> with SingleTickerProv
   // Xử lý Function Calling (Spoken-First Tool Execution)
   void _handleLiveToolCall(String name, Map<String, dynamic> args) {
     AppLogger.i('🛠️ Thực thi Tool Calling từ giọng nói: $name (Đối số: $args)', tag: 'ASSISTANT');
-
-    // Chờ 1.2s để Bác nghe câu xác nhận ân cần từ AI trước khi chuyển màn hình
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      final navState = AppRouter.navigatorKey.currentState;
-      final navContext = AppRouter.navigatorKey.currentContext;
-
-      switch (name) {
-        case 'start_breathing_exercise':
-          AppLogger.nav(AppRoutes.lotusBreathing, arguments: 'Live tool: start_breathing_exercise');
-          navState?.pushNamed(AppRoutes.lotusBreathing);
-          break;
-
-        case 'open_radio':
-          AppLogger.nav(AppRoutes.radio, arguments: 'Live tool: open_radio');
-          navState?.pushNamed(AppRoutes.radio);
-          break;
-
-        case 'open_voice_memo':
-          AppLogger.nav(AppRoutes.voiceMemo, arguments: 'Live tool: open_voice_memo');
-          navState?.pushNamed(AppRoutes.voiceMemo);
-          break;
-
-        case 'open_history':
-          AppLogger.nav(AppRoutes.history, arguments: 'Live tool: open_history');
-          navState?.pushNamed(AppRoutes.history);
-          break;
-
-        case 'open_settings':
-          AppLogger.nav(AppRoutes.settings, arguments: 'Live tool: open_settings');
-          navState?.pushNamed(AppRoutes.settings);
-          break;
-
-        case 'translate_speech':
-          AppLogger.i('🗣️ Chuyển sang chế độ phiên dịch đàm thoại', tag: 'ASSISTANT');
-          break;
-
-        case 'navigate_to_screen':
-          final target = (args['screen'] as String?)?.toLowerCase() ?? 'home';
-          if (target == 'voice_memo' || target == 'voice-memo') {
-            AppLogger.nav(AppRoutes.voiceMemo);
-            navState?.pushNamed(AppRoutes.voiceMemo);
-          } else if (target == 'radio') {
-            AppLogger.nav(AppRoutes.radio);
-            navState?.pushNamed(AppRoutes.radio);
-          } else if (target == 'breathing' || target == 'lotus_breathing') {
-            AppLogger.nav(AppRoutes.lotusBreathing);
-            navState?.pushNamed(AppRoutes.lotusBreathing);
-          } else if (target == 'settings') {
-            AppLogger.nav(AppRoutes.settings);
-            navState?.pushNamed(AppRoutes.settings);
-          } else if (target == 'history') {
-            AppLogger.nav(AppRoutes.history);
-            navState?.pushNamed(AppRoutes.history);
-          } else {
-            AppLogger.nav(AppRoutes.home);
-            navState?.pushNamed(AppRoutes.home);
-          }
-          break;
-
-        case 'trigger_sos_emergency':
-          AppLogger.e('🚨 Kích hoạt SOS từ lệnh thoại AI!', tag: 'ASSISTANT');
-          if (navContext != null && navContext.mounted) {
-            ScaffoldMessenger.of(navContext).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Hệ thống đang kết nối liên hệ khẩn cấp cho Bác...',
-                  style: TextStyle(fontFamily: 'Roboto', fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                backgroundColor: AppColors.sosOrange,
-                duration: Duration(seconds: 4),
-              ),
-            );
-          }
-          break;
-      }
-    });
+    VoiceCommandBus().dispatchToolCall(name, args);
   }
 
   String _getBadgeText() {

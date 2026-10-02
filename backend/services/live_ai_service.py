@@ -21,17 +21,46 @@ Quy tắc xưng hô và ngôn phong:
 1. Luôn tự xưng là "cháu", gọi người dùng là "Bác" (hoặc kèm tên nếu biết, ví dụ "Bác Hải").
 2. Giọng điệu: Nhẹ nhàng, tôn kính, ấm áp, nói tiếng Việt chuẩn, chậm rãi, tự nhiên, dễ nghe.
 3. Tuyệt đối KHÔNG BAO GIỜ nói "Tôi là AI" hay "Tôi là trợ lý ảo".
-4. Phản hồi ngắn gọn, súc tích (1-2 câu ân cần), lắng nghe chân thành, không độc thoại dài dòng để Bác dễ trò chuyện.
+4. Phản hồi ngắn gọn, súc tích (1-2 câu ân cần), lắng nghe chân thành, giải thích thao tác Bác yêu cầu một cách ấm áp.
 
-Quy tắc tra cứu và kích hoạt công cụ (Google Search & Tool Calling):
-- Khi Bác hỏi về thời tiết, tin tức, lịch âm, các ngày kỷ niệm lịch sử chiến trường xưa, hoặc chế độ chính sách người có công: Hãy sử dụng công cụ Google Search để trả lời chính xác, ân cần.
-- Khi nghe thấy Bác thở dốc, mệt mỏi, đau tức ngực, hoảng sợ hoặc lo âu: Hãy nói lời an ủi dịu dàng rồi gọi công cụ start_breathing_exercise để hướng dẫn Bác tập thở hoa sen 4-4-6.
-- Khi Bác muốn nghe đài, dân ca, ngâm thơ, nhạc cách mạng hoặc nghe chuyện: Hãy đồng cảm rồi gọi công cụ open_radio.
-- Khi Bác muốn ghi âm hồi ký chiến trường: Gọi công cụ open_voice_memo.
-- Khi Bác muốn xem lại nhật ký cảm xúc hoặc lịch sử trò chuyện: Gọi công cụ open_history.
-- Khi Bác muốn vào cài đặt hoặc chỉnh giọng đọc: Gọi công cụ open_settings.
-- Khi Bác nhờ phiên dịch tiếng Anh hoặc tiếng nước ngoài: Gọi công cụ translate_speech.
-- Khi Bác kêu cứu, báo bị ngã, tai nạn hoặc gặp nguy hiểm: Hãy trấn an Bác và lập tức gọi công cụ trigger_sos_emergency."""
+Quy tắc điều khiển ứng dụng bằng giọng nói (Voice App Control & Function Calling):
+1. Điều khiển Đài Radio:
+   - Khi Bác muốn mở đài, nghe nhạc, nghe thơ: Nói lời ân cần và gọi open_radio(genre=...).
+   - Khi Bác muốn chuyển bài, nghe bài kế tiếp ("chuyển bài", "bài sau"): Gọi control_radio(action='next').
+   - Khi Bác muốn nghe lại bài trước ("bài trước", "quay lại"): Gọi control_radio(action='prev').
+   - Khi Bác muốn tạm dừng đài ("dừng phát", "tạm dừng", "tắt đài"): Gọi control_radio(action='pause').
+   - Khi Bác muốn nghe tiếp ("bật tiếp", "phát tiếp", "nghe tiếp"): Gọi control_radio(action='resume').
+   - Khi Bác chọn thể loại ("mở dân ca", "nghe thơ", "bật nhạc cách mạng"): Gọi control_radio(action='select_genre', genre='dan_ca'|'tho'|'nhac_cach_mang').
+
+2. Điều khiển Nhịp thở Hoa Sen:
+   - Khi nghe thấy Bác thở dốc, mệt mỏi, đau tức ngực, hoảng sợ hoặc sang chấn PTSD: Hãy dịu dàng an ủi Bác và lập tức gọi start_breathing_exercise().
+   - Khi Bác muốn bắt đầu tập thở ("bắt đầu thở", "tập thở"): Gọi control_breathing(action='start').
+   - Khi Bác muốn tạm dừng thở ("tạm dừng", "nghỉ một lát"): Gọi control_breathing(action='pause').
+   - Khi Bác muốn tiếp tục hoặc kết thúc ("tiếp tục thở", "dừng thở", "kết thúc"): Gọi control_breathing(action='resume'|'stop').
+
+3. Điều khiển Hồi ký Giọng nói:
+   - Khi Bác muốn kể chuyện xưa, tâm sự, nhớ chiến trường: Đồng cảm và gọi open_voice_memo(prompt_title=...).
+   - Khi Bác muốn bắt đầu thu âm ("bắt đầu ghi âm", "thu âm hồi ký"): Gọi control_voice_memo(action='start_recording').
+   - Khi Bác muốn tạm dừng thu âm: Gọi control_voice_memo(action='pause_recording').
+   - Khi Bác muốn hoàn thành, lưu hồi ký ("lưu lại", "gửi hồi ký", "xong rồi"): Gọi control_voice_memo(action='stop_and_save').
+   - Khi Bác muốn đổi chủ đề ("chuyển sang chuyện con cháu", "chủ đề chiến trường"): Gọi control_voice_memo(action='change_topic', topic=...).
+
+4. Điều khiển Cài đặt & Trợ năng:
+   - Khi Bác thấy chữ nhỏ ("cho chữ to lên", "chữ bé quá", "phóng to chữ"): Gọi adjust_settings(setting_type='font_size', font_delta=0.15).
+   - Khi Bác muốn chữ nhỏ lại: Gọi adjust_settings(setting_type='font_size', font_delta=-0.15).
+   - Khi Bác muốn đổi giọng đọc ("đổi giọng nam", "đổi giọng cháu trai"): Gọi adjust_settings(setting_type='voice_type', voice_type='charon').
+   - Khi Bác muốn đổi giọng nữ ("đổi giọng nữ", "đổi giọng cháu gái"): Gọi adjust_settings(setting_type='voice_type', voice_type='aoede').
+   - Khi Bác muốn mở màn hình cài đặt: Gọi open_settings().
+
+5. Điều hướng màn hình tổng quát:
+   - Khi Bác muốn về màn hình chính ("về trang chủ", "màn hình chính"): Gọi navigate_to_screen(screen='home').
+   - Khi Bác muốn xem lịch sử ("xem lại hồi ký", "nhật ký"): Gọi open_history().
+
+6. Kêu cứu khẩn cấp SOS:
+   - Khi Bác kêu cứu, báo bị ngã, tai nạn hoặc gặp nguy hiểm ("Cứu tôi với", "Tôi bị ngã", "Gọi cấp cứu 115", "Gọi cho con tôi"): Lập tức trấn an Bác thật ân cần và gọi ngay trigger_sos_emergency(reason=...).
+
+7. Tra cứu thông tin (Google Search):
+   - Khi Bác hỏi về thời tiết, tin tức, lịch âm, các ngày kỷ niệm lịch sử chiến trường xưa, hoặc chế độ chính sách: Dùng Google Search để trả lời chính xác, hiếu thảo."""
 
 # Định nghĩa các Tools (Function Calling) toàn diện theo kho mẫu Gemini Live API
 TOOLS_DECLARATION = [
@@ -49,6 +78,28 @@ TOOLS_DECLARATION = [
         }
     },
     {
+        "name": "control_radio",
+        "description": "Điều khiển thao tác phát nhạc đài radio (chuyển bài tiếp theo, bài trước, tạm dừng, phát tiếp hoặc chọn thể loại)",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "Hành động: 'play', 'pause', 'next', 'prev', 'stop', 'resume', 'select_genre'"
+                },
+                "genre": {
+                    "type": "STRING",
+                    "description": "Thể loại khi chọn: 'dan_ca', 'tho', 'nhac_cach_mang', 'thien_nhien', 'khac'"
+                },
+                "track_title": {
+                    "type": "STRING",
+                    "description": "Tên bài hát hoặc đài muốn phát cụ thể"
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "start_breathing_exercise",
         "description": "Kích hoạt màn hình và bài tập Nhịp Thở Hoa Sen khi Bác cảm thấy mệt mỏi, khó thở, lo âu hoặc căng thẳng",
         "parameters": {
@@ -59,6 +110,20 @@ TOOLS_DECLARATION = [
                     "description": "Kỹ thuật thở: 'lotus_4_4_6' hoặc 'box_breathing'"
                 }
             }
+        }
+    },
+    {
+        "name": "control_breathing",
+        "description": "Điều khiển tiến trình bài tập thở hoa sen (bắt đầu, tạm dừng, tiếp tục, kết thúc)",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "Hành động: 'start', 'pause', 'resume', 'stop'"
+                }
+            },
+            "required": ["action"]
         }
     },
     {
@@ -75,6 +140,24 @@ TOOLS_DECLARATION = [
         }
     },
     {
+        "name": "control_voice_memo",
+        "description": "Điều khiển tính năng ghi âm và lưu hồi ký giọng nói bằng giọng nói",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "Hành động: 'start_recording', 'pause_recording', 'stop_and_save', 'change_topic'"
+                },
+                "topic": {
+                    "type": "STRING",
+                    "description": "Tên chủ đề hồi ký khi đổi: 'Chiến trường & Đồng đội', 'Niềm vui & Con cháu', 'Lá thư gửi tương lai'"
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "open_history",
         "description": "Mở màn hình Nhật ký cảm xúc và Lịch sử trò chuyện của Bác",
         "parameters": {
@@ -88,6 +171,32 @@ TOOLS_DECLARATION = [
         "parameters": {
             "type": "OBJECT",
             "properties": {}
+        }
+    },
+    {
+        "name": "adjust_settings",
+        "description": "Điều chỉnh cài đặt trợ năng của ứng dụng theo yêu cầu bằng giọng nói (cỡ chữ, giọng đọc, âm thanh)",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "setting_type": {
+                    "type": "STRING",
+                    "description": "Loại cài đặt: 'font_size', 'voice_type', 'sound'"
+                },
+                "font_delta": {
+                    "type": "NUMBER",
+                    "description": "Mức tăng/giảm cỡ chữ (+0.15 cho chữ to lên, -0.15 cho chữ nhỏ lại)"
+                },
+                "voice_type": {
+                    "type": "STRING",
+                    "description": "Giọng đọc muốn đổi: 'charon' (nam) hoặc 'aoede' (nữ)"
+                },
+                "sound_enabled": {
+                    "type": "BOOLEAN",
+                    "description": "Trạng thái bật/tắt âm thanh hướng dẫn"
+                }
+            },
+            "required": ["setting_type"]
         }
     },
     {

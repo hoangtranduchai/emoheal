@@ -4,10 +4,12 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/logger.dart';
 import '../core/sound_coordinator.dart';
+import '../core/voice_command_bus.dart';
 import 'api_service.dart';
 
 /// Trạng thái phiên đàm thoại thời gian thực
@@ -64,6 +66,12 @@ class LiveVoiceService {
   bool _isActive = false;
   bool get isActive => _isActive;
 
+  // REST Multimodal Engine B Fallback state
+  bool _isRestFallback = false;
+  bool get isRestFallback => _isRestFallback;
+  String? _restAudioPath;
+  String _currentVoice = 'aoede';
+
   /// Tính năng lượng âm thanh RMS từ chunk PCM 16-bit
   static double _calculatePcmRms(List<int> chunk) {
     if (chunk.isEmpty) return 0.0;
@@ -89,6 +97,7 @@ class LiveVoiceService {
       return true;
     }
 
+    _currentVoice = voice;
     _setState(LiveVoiceState.connecting);
     _isActive = true;
 
@@ -119,34 +128,38 @@ class LiveVoiceService {
       AppLogger.i('📡 Kết nối WebSocket Live Assistant tới: $wsUri', tag: 'LIVE-VOICE');
 
       if (!kIsWeb) {
-        _socket = await WebSocket.connect(wsUri.toString());
-        _socket.listen(
-          _onSocketData,
-          onError: (err) {
-            AppLogger.e('Lỗi WebSocket Live: $err', tag: 'LIVE-VOICE');
-            _handleError('Lỗi đường truyền kết nối: $err');
-          },
-          onDone: () {
-            AppLogger.i('WebSocket Live đã ngắt kết nối', tag: 'LIVE-VOICE');
-            if (_isActive) {
-              stopSession();
-            }
-          },
-        );
+        try {
+          _socket = await WebSocket.connect(wsUri.toString()).timeout(const Duration(seconds: 4));
+          _socket.listen(
+            _onSocketData,
+            onError: (err) {
+              AppLogger.w('Lỗi WebSocket Live: $err, tự động chuyển sang chế độ dự phòng REST Multimodal', tag: 'LIVE-VOICE');
+              _startRestFallbackSession(voice: voice);
+            },
+            onDone: () {
+              AppLogger.i('WebSocket Live đã ngắt kết nối', tag: 'LIVE-VOICE');
+              if (_isActive && !_isRestFallback) {
+                stopSession();
+              }
+            },
+          );
+
+          // Khởi động Micro Stream cho WebSocket
+          await _startMicStream();
+          _setState(LiveVoiceState.listening);
+          AppLogger.i('🎙️ Phiên đàm thoại Gemini Live đã sẵn sàng!', tag: 'LIVE-VOICE');
+          return true;
+        } catch (wsErr) {
+          AppLogger.w('Không thể kết nối WebSocket Live ($wsErr) -> Kích hoạt cơ chế tự phục hồi REST Multimodal Fallback!', tag: 'LIVE-VOICE');
+          return await _startRestFallbackSession(voice: voice);
+        }
       } else {
-        AppLogger.w('Nền tảng Web cần kết nối qua browser websocket adapter', tag: 'LIVE-VOICE');
+        AppLogger.i('Nền tảng Web -> Kích hoạt chế độ REST Multimodal Fallback', tag: 'LIVE-VOICE');
+        return await _startRestFallbackSession(voice: voice);
       }
-
-      // 4. Khởi động Micro Stream với Smart Vocal Barge-In Gate
-      await _startMicStream();
-
-      _setState(LiveVoiceState.listening);
-      AppLogger.i('🎙️ Phiên đàm thoại Gemini Live đã sẵn sàng!', tag: 'LIVE-VOICE');
-      return true;
     } catch (e, st) {
-      AppLogger.e('Lỗi khởi tạo phiên Live Voice', tag: 'LIVE-VOICE', error: e, stackTrace: st);
-      _handleError('Không thể kết nối Trợ lý AI trực tiếp: $e');
-      return false;
+      AppLogger.e('Lỗi khởi tạo phiên Live Voice ($e), thử REST Fallback', tag: 'LIVE-VOICE', error: e, stackTrace: st);
+      return await _startRestFallbackSession(voice: voice);
     }
   }
 
@@ -288,6 +301,7 @@ class LiveVoiceService {
           final name = data['name'] as String? ?? '';
           final args = (data['args'] as Map<String, dynamic>?) ?? {};
           AppLogger.i('🛠️ Nhận yêu cầu Tool Call từ Gemini: $name, args: $args', tag: 'LIVE-VOICE');
+          VoiceCommandBus().dispatchToolCall(name, args);
           onToolCall?.call(name, args);
           break;
 
@@ -355,11 +369,156 @@ class LiveVoiceService {
     onInterrupted?.call();
   }
 
+  /// Khởi động ghi âm cho chế độ dự phòng REST Multimodal Engine B
+  Future<bool> _startRestFallbackSession({String voice = 'aoede'}) async {
+    _isRestFallback = true;
+    _currentVoice = voice;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      _restAudioPath = '${tempDir.path}/live_fallback_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      const config = RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        sampleRate: 16000,
+        numChannels: 1,
+      );
+
+      await _audioRecorder.start(config, path: _restAudioPath!);
+      _setState(LiveVoiceState.listening);
+      AppLogger.i('🎙️ [REST FALLBACK] Đang ghi âm giọng nói Bác: $_restAudioPath', tag: 'LIVE-VOICE');
+      return true;
+    } catch (e, st) {
+      AppLogger.e('Lỗi khởi động REST Fallback', tag: 'LIVE-VOICE', error: e, stackTrace: st);
+      _handleError('Không thể mở micro để trò chuyện cùng Bác: $e');
+      return false;
+    }
+  }
+
+  /// Hoàn tất ghi âm và gửi xử lý qua REST API /api/assistant
+  Future<void> _finalizeRestTurn() async {
+    if (!_isRestFallback || _restAudioPath == null) return;
+    try {
+      final recordedPath = await _audioRecorder.stop();
+      if (recordedPath == null || recordedPath.isEmpty) {
+        _setState(LiveVoiceState.idle);
+        return;
+      }
+
+      _setState(LiveVoiceState.connecting);
+      AppLogger.i('📤 [REST FALLBACK] Gửi đoạn ghi âm tới /api/assistant...', tag: 'LIVE-VOICE');
+
+      final res = await ApiService.sendAssistantRequest(
+        audioPath: recordedPath,
+        voice: _currentVoice,
+      );
+
+      final transcription = res['transcription'] as String? ?? '';
+      final text = res['text'] as String? ?? '';
+      final audioUrl = res['audio_url'] as String?;
+      final target = res['target'] as String?;
+      final action = res['action'] as String?;
+      final intent = res['intent'] as String?;
+
+      if (transcription.isNotEmpty) {
+        _inputTranscriptController.add(transcription);
+      }
+      if (text.isNotEmpty) {
+        _outputTranscriptController.add(text);
+      }
+
+      // Điều phối lệnh tới VoiceCommandBus
+      _dispatchRestResultToBus(target, action, intent);
+
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        _setState(LiveVoiceState.speaking);
+        final fullUrl = audioUrl.startsWith('http')
+            ? audioUrl
+            : (audioUrl.startsWith('/') ? '${ApiService.baseUrl}$audioUrl' : '${ApiService.baseUrl}/$audioUrl');
+
+        await _audioPlayer.setVolume(1.0);
+        await _audioPlayer.play(UrlSource(fullUrl));
+
+        _audioPlayer.onPlayerComplete.first.then((_) {
+          _setState(LiveVoiceState.idle);
+          _isRestFallback = false;
+        });
+      } else {
+        _setState(LiveVoiceState.idle);
+        _isRestFallback = false;
+      }
+    } catch (e, st) {
+      AppLogger.e('Lỗi xử lý REST Fallback turn', tag: 'LIVE-VOICE', error: e, stackTrace: st);
+      _setState(LiveVoiceState.idle);
+      _isRestFallback = false;
+    }
+  }
+
+  /// Điều phối kết quả từ REST API về VoiceCommandBus
+  void _dispatchRestResultToBus(String? target, String? action, String? intent) {
+    if (intent == 'SOS' || target == 'sos' || action == 'sos_trigger') {
+      VoiceCommandBus().dispatchSos();
+      return;
+    }
+    if (target == 'radio') {
+      if (action == 'next') {
+        VoiceCommandBus().dispatchRadio(VoiceRadioAction.next);
+      } else if (action == 'prev') {
+        VoiceCommandBus().dispatchRadio(VoiceRadioAction.prev);
+      } else if (action == 'pause') {
+        VoiceCommandBus().dispatchRadio(VoiceRadioAction.pause);
+      } else if (action == 'resume' || action == 'play') {
+        VoiceCommandBus().dispatchRadio(VoiceRadioAction.resume);
+      } else {
+        VoiceCommandBus().dispatchNavigation('/radio', 'radio');
+        VoiceCommandBus().dispatchRadio(VoiceRadioAction.play);
+      }
+      return;
+    }
+    if (target == 'breathing') {
+      VoiceCommandBus().dispatchNavigation('/lotus_breathing', 'breathing');
+      VoiceCommandBus().dispatchBreathing(VoiceBreathingAction.start);
+      return;
+    }
+    if (target == 'voice-memo' || target == 'voice_memo') {
+      VoiceCommandBus().dispatchNavigation('/voice_memos', 'voice_memo');
+      if (action == 'start_recording') {
+        VoiceCommandBus().dispatchMemo(VoiceMemoAction.startRecording);
+      } else if (action == 'save_recording') {
+        VoiceCommandBus().dispatchMemo(VoiceMemoAction.stopAndSave);
+      }
+      return;
+    }
+    if (target == 'settings') {
+      if (action == 'font_increase') {
+        VoiceCommandBus().dispatchSettings(fontDelta: 0.15);
+      } else if (action == 'font_decrease') {
+        VoiceCommandBus().dispatchSettings(fontDelta: -0.15);
+      } else {
+        VoiceCommandBus().dispatchNavigation('/settings', 'settings');
+      }
+      return;
+    }
+    if (target == 'history') {
+      VoiceCommandBus().dispatchNavigation('/history', 'history');
+      return;
+    }
+    if (target == 'home') {
+      VoiceCommandBus().dispatchNavigation('/home', 'home');
+      return;
+    }
+  }
+
   /// Đóng phiên đàm thoại
   Future<void> stopSession() async {
     if (!_isActive) return;
     _isActive = false;
     AppLogger.i('🛑 Đang đóng phiên Live Voice...', tag: 'LIVE-VOICE');
+
+    if (_isRestFallback) {
+      await _finalizeRestTurn();
+      _isRestFallback = false;
+      return;
+    }
 
     _currentTurnPcm.clear();
     _isPlayingAudio = false;

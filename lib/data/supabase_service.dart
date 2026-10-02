@@ -306,33 +306,40 @@ class SupabaseService {
     };
   }
 
-  /// Lưu hoặc cập nhật cấu hình cài đặt
+  /// Lưu hoặc cập nhật cấu hình cài đặt (hỗ trợ cập nhật từng phần hoặc toàn bộ)
   Future<void> saveUserSettings({
-    required bool soundEnabled,
-    required double fontSizeScale,
-    required bool antiMisTap,
-    required bool voiceControlEnabled,
-    required String voiceType,
+    bool? soundEnabled,
+    double? fontSizeScale,
+    bool? antiMisTap,
+    bool? voiceControlEnabled,
+    String? voiceType,
   }) async {
+    final current = await getUserSettings();
+    final effectiveSound = soundEnabled ?? (current['sound_enabled'] as bool? ?? true);
+    final effectiveFont = fontSizeScale ?? ((current['font_size_scale'] as num?)?.toDouble() ?? 1.15);
+    final effectiveAntiMisTap = antiMisTap ?? (current['anti_mis_tap'] as bool? ?? false);
+    final effectiveVoiceControl = voiceControlEnabled ?? (current['voice_control_enabled'] as bool? ?? true);
+    final effectiveVoiceType = voiceType ?? (current['voice_type'] as String? ?? 'aoede');
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('setting_sound_enabled', soundEnabled);
-    await prefs.setDouble('setting_font_size_scale', fontSizeScale);
-    await prefs.setBool('setting_anti_mis_tap', antiMisTap);
-    await prefs.setBool('setting_voice_control_enabled', voiceControlEnabled);
-    await prefs.setString('setting_voice_type', voiceType);
+    await prefs.setBool('setting_sound_enabled', effectiveSound);
+    await prefs.setDouble('setting_font_size_scale', effectiveFont);
+    await prefs.setBool('setting_anti_mis_tap', effectiveAntiMisTap);
+    await prefs.setBool('setting_voice_control_enabled', effectiveVoiceControl);
+    await prefs.setString('setting_voice_type', effectiveVoiceType);
 
     final client = _client;
     if (client != null && isAuthenticated) {
       try {
         await client.from('user_settings').upsert({
           'user_id': _currentUserId,
-          'sound_enabled': soundEnabled,
-          'font_size_scale': fontSizeScale,
-          'anti_mis_tap': antiMisTap,
-          'voice_control_enabled': voiceControlEnabled,
-          'voice_type': voiceType,
+          'sound_enabled': effectiveSound,
+          'font_size_scale': effectiveFont,
+          'anti_mis_tap': effectiveAntiMisTap,
+          'voice_control_enabled': effectiveVoiceControl,
+          'voice_type': effectiveVoiceType,
         });
-        AppLogger.db('UPSERT', 'user_settings', data: 'voice=$voiceType');
+        AppLogger.db('UPSERT', 'user_settings', data: 'voice=$effectiveVoiceType');
       } catch (e) {
         AppLogger.e('Lỗi cloud user_settings', tag: 'SUPABASE', error: e);
       }
