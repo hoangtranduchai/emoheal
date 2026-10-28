@@ -183,7 +183,9 @@ async def _synthesize(phonetic_text: str, voice: str) -> bytes:
                         mime = current_mime
                         chunks.append(part.inline_data.data)
             audio = b"".join(chunks)
-            if mime and (mime.startswith("audio/pcm") or mime.startswith("audio/L16")):
+            # MIME tokens are case-insensitive / Gemini có thể trả audio/l16 viết thường.
+            media_type = (mime or "").split(";", 1)[0].strip().lower()
+            if media_type in ("audio/pcm", "audio/l16"):
                 if not audio or len(audio) % 2:
                     raise RuntimeError("Invalid PCM")
                 rate_match = re.search(r"rate=(\d+)", mime)

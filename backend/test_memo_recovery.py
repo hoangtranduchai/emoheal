@@ -1,7 +1,9 @@
 """Memoir regression coverage / Hồi quy phụ đề, thời hạn và giọng đọc."""
 import asyncio
+import io
 import json
 import threading
+import wave
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -118,3 +120,29 @@ def test_tts_failure_does_not_expose_provider_tokens(monkeypatch, caplog):
     assert response.status_code == 503
     assert "secret-token" not in response.text
     assert "secret-token" not in caplog.text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mime,rate", [
+    ("audio/l16; rate=24000; channels=1", 24000),
+    ("Audio/L16;rate=16000", 16000),
+    ("audio/pcm;rate=24000", 24000),
+])
+async def test_native_tts_accepts_provider_pcm_mime_casing(monkeypatch, mime, rate):
+    # Real provider casing must produce a playable WAV / Giữ đúng PCM, không gọi dự phòng.
+    pcm = b"\x00\x00\x10\x00" * 40
+    response = SimpleNamespace(candidates=[SimpleNamespace(content=SimpleNamespace(parts=[
+        SimpleNamespace(inline_data=SimpleNamespace(data=pcm, mime_type=mime))]))])
+    provider = SimpleNamespace(aio=SimpleNamespace(
+        models=SimpleNamespace(generate_content=AsyncMock(return_value=response)),
+        aclose=AsyncMock()))
+    monkeypatch.setenv("GEMINI_API_KEY", "synthetic-test-key")
+    monkeypatch.setattr(tts_service.genai, "Client", lambda **kwargs: provider)
+    monkeypatch.setattr("edge_tts.Communicate", MagicMock(side_effect=AssertionError("Native speech was valid")))
+    audio = await tts_service._synthesize("Dạ cháu đang nghe Bác kể.", "Aoede")
+    with wave.open(io.BytesIO(audio), "rb") as recording:
+        assert recording.getframerate() == rate
+        assert recording.getnchannels() == 1
+        assert recording.getsampwidth() == 2
+        assert recording.readframes(recording.getnframes()) == pcm
+    provider.aio.aclose.assert_awaited_once()
