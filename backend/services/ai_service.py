@@ -447,7 +447,8 @@ def get_assistant_response_from_audio(
             logger.info(f"✅ Gemini Multimodal SER Audio phản hồi thành công trong {elapsed_ms:.1f}ms")
         except Exception as e:
             elapsed_ms = (time.time() - t0) * 1000
-            logger.warning("Audio model %s unavailable (%s); trying fallback", AUDIO_PRIMARY_MODEL, type(e).__name__)
+            logger.warning("Audio model %s unavailable (%s, code=%s); trying fallback",
+                           AUDIO_PRIMARY_MODEL, type(e).__name__, getattr(e, "code", None))
             t1 = time.time()
             response = client.models.generate_content(
                 model=AUDIO_FALLBACK_MODEL,
@@ -458,7 +459,8 @@ def get_assistant_response_from_audio(
             elapsed_fallback_ms = (time.time() - t1) * 1000
             logger.info(f"✅ Fallback {AUDIO_FALLBACK_MODEL} phản hồi thành công trong {elapsed_fallback_ms:.1f}ms")
     except Exception as client_err:
-        logger.error("Audio model unavailable (%s)", type(client_err).__name__)
+        logger.error("Audio model unavailable (%s, code=%s)",
+                     type(client_err).__name__, getattr(client_err, "code", None))
         raise AudioProcessingError() from None
     finally:
         if client is not None:
