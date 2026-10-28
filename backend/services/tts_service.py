@@ -4,6 +4,9 @@ import time
 import hashlib
 import asyncio
 import re
+import io
+import wave
+from collections import OrderedDict
 from typing import Optional, Dict
 from google import genai
 from google.genai import types
@@ -20,7 +23,10 @@ DEFAULT_VOICE = "Aoede"
 FALLBACK_VOICE = "Charon"
 
 CACHE_DIR = "static/cache"
-_memory_cache: Dict[str, bytes] = {}
+_memory_cache: Dict[str, bytes] = OrderedDict()
+MAX_CACHE_BYTES = 16 * 1024 * 1024
+TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")
+_synthesis_locks: Dict[str, asyncio.Lock] = {}
 
 def sanitize_tts_text(text: str) -> str:
     """
@@ -106,148 +112,191 @@ MASTER_VOICE_SCRIPTS: Dict[str, str] = {
     "NAV_HISTORY": "Dạ cháu đang mở Lịch sử Hồi ký cho Bác đây ạ.",
 }
 
+def _audio_extension(audio: bytes) -> str:
+    """Validate the container, never fake success / Chỉ chấp nhận âm thanh hợp lệ."""
+    if audio.startswith(b"RIFF"):
+        try:
+            with wave.open(io.BytesIO(audio), "rb") as recording:
+                if recording.getnframes() > 0 and recording.getnchannels() == 1 and recording.getsampwidth() == 2:
+                    return ".wav"
+        except (wave.Error, EOFError):
+            pass
+    offset = 0
+    if audio.startswith(b"ID3") and len(audio) >= 10:
+        size = audio[6:10]
+        if any(byte & 0x80 for byte in size):
+            raise RuntimeError("Dạ âm thanh phản hồi chưa sẵn sàng.")
+        offset = 10 + sum((byte & 0x7f) << (21 - 7 * i) for i, byte in enumerate(size))
+    # An ID3 tag alone is not an MP3 / Chỉ có thẻ ID3 chưa phải âm thanh.
+    for index in range(offset, min(len(audio) - 3, offset + 4096)):
+        header = audio[index:index + 4]
+        if header[0] == 0xff and header[1] & 0xe0 == 0xe0 and header[1] & 0x06 and header[2] & 0xf0 not in (0, 0xf0) and header[2] & 0x0c != 0x0c:
+            return ".mp3"
+    raise RuntimeError("Dạ âm thanh phản hồi chưa sẵn sàng.")
+
+
 def _get_cache_path(text: str, voice: str) -> str:
     os.makedirs(CACHE_DIR, exist_ok=True)
-    hash_key = hashlib.md5(f"{text}_{voice}".encode("utf-8")).hexdigest()
-    return os.path.join(CACHE_DIR, f"tts_{hash_key}.mp3")
+    key = hashlib.sha256(f"{text}_{voice}".encode("utf-8")).hexdigest()
+    return os.path.join(CACHE_DIR, f"tts_{key}.mp3")
 
-async def generate_speech(text: str, output_path: Optional[str] = None, voice: Optional[str] = None) -> str:
-    """
-    Tạo giọng đọc tiếng Việt thuần túy bằng Google Gemini Native Voice (Aoede / Charon)
-    kết hợp bộ đệm In-Memory RAM (0.01ms) và Disk Cache MD5.
-    """
-    clean_text = text.strip() if isinstance(text, str) and text.strip() else "Dạ cháu lắng nghe Bác đây ạ."
-    selected_voice = VOICE_MAP.get(voice, DEFAULT_VOICE) if voice else DEFAULT_VOICE
-    
-    phonetic_text = sanitize_tts_text(clean_text)
-    hash_key = hashlib.md5(f"{phonetic_text}_{selected_voice}".encode("utf-8")).hexdigest()
 
-    # 1. Kiểm tra In-Memory RAM Cache (0.01ms)
-    if hash_key in _memory_cache:
-        audio_bytes = _memory_cache[hash_key]
-        logger.info(f"⚡ [TTS RAM CACHE HIT] Trả về audio từ RAM (0.01ms, {len(audio_bytes)/1024:.1f} KB)")
-        if output_path:
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, "wb") as dst:
-                dst.write(audio_bytes)
-            return output_path
-        cache_path = os.path.join(CACHE_DIR, f"tts_{hash_key}.mp3")
-        return cache_path
+def _remember(key: str, audio: bytes):
+    while _memory_cache and sum(len(value) for value in _memory_cache.values()) + len(audio) > MAX_CACHE_BYTES:
+        _memory_cache.pop(next(iter(_memory_cache)))
+    if len(audio) <= MAX_CACHE_BYTES:
+        _memory_cache[key] = audio
 
-    # 2. Kiểm tra Disk Cache (0.1ms)
-    cache_path = _get_cache_path(phonetic_text, selected_voice)
-    if os.path.exists(cache_path) and os.path.getsize(cache_path) > 500:
-        logger.info(f"⚡ [TTS DISK CACHE HIT] Trả về audio từ Disk Cache (0.1ms): {cache_path}")
+
+def _write_audio(audio: bytes, requested_path: str) -> str:
+    extension = _audio_extension(audio)
+    final_path = os.path.splitext(requested_path)[0] + extension
+    os.makedirs(os.path.dirname(final_path) or ".", exist_ok=True)
+    with open(final_path, "wb") as output:
+        output.write(audio)
+    return final_path
+
+
+async def _synthesize(phonetic_text: str, voice: str) -> bytes:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
+            timeout=12000, retry_options=types.HttpRetryOptions(attempts=1)))
         try:
-            with open(cache_path, "rb") as src:
-                cached_bytes = src.read()
-                _memory_cache[hash_key] = cached_bytes
-        except Exception:
-            pass
-
-        if output_path:
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, "wb") as dst:
-                dst.write(_memory_cache.get(hash_key, b""))
-            return output_path
-        return cache_path
-
-    if not output_path:
-        output_path = f"static/audio_{uuid.uuid4().hex}.mp3"
-    
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    t_start = time.time()
-    logger.info(f"🔊 [GEMINI-AUDIO] Tổng hợp giọng đọc Google Native [{selected_voice}]: \"{clean_text[:60]}...\"")
-
-    # Gọi Google Gemini Multimodal Audio Generation
-    try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if api_key:
-            client = genai.Client(api_key=api_key)
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=f"Hãy đọc to, chậm rãi, ấm áp bằng tiếng Việt câu sau: {phonetic_text}",
+            response = await asyncio.wait_for(client.aio.models.generate_content(
+                model=TTS_MODEL,
+                contents=f"Hãy đọc nguyên văn, chậm rãi, ấm áp bằng tiếng Việt: {phonetic_text}",
                 config=types.GenerateContentConfig(
                     response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=selected_voice
-                            )
-                        )
-                    )
-                )
-            )
-            # Trích xuất binary audio bytes từ response
-            for part in response.candidates[0].content.parts:
-                if part.inline_data and part.inline_data.data:
-                    audio_bytes = part.inline_data.data
-                    with open(output_path, "wb") as f_out:
-                        f_out.write(audio_bytes)
-                    _memory_cache[hash_key] = audio_bytes
-                    try:
-                        with open(cache_path, "wb") as f_c:
-                            f_c.write(audio_bytes)
-                    except Exception:
-                        pass
-                    dur = (time.time() - t_start) * 1000
-                    logger.info(f"✅ [GEMINI-AUDIO] Tổng hợp thành công ({dur:.1f}ms): {output_path}")
-                    return output_path
-    except Exception as gemini_err:
-        logger.debug(f"Gemini API Audio fallback: {gemini_err}")
-
-    # Local fallback synthesizer
+                    speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice)
+                    )),
+                ),
+            ), timeout=12)
+            chunks, mime = [], None
+            for candidate in response.candidates or []:
+                for part in candidate.content.parts or []:
+                    if part.inline_data and part.inline_data.data:
+                        current_mime = part.inline_data.mime_type or ""
+                        if mime is not None and current_mime != mime:
+                            raise RuntimeError("Mixed audio formats")
+                        mime = current_mime
+                        chunks.append(part.inline_data.data)
+            audio = b"".join(chunks)
+            if mime and (mime.startswith("audio/pcm") or mime.startswith("audio/L16")):
+                if not audio or len(audio) % 2:
+                    raise RuntimeError("Invalid PCM")
+                rate_match = re.search(r"rate=(\d+)", mime)
+                rate = int(rate_match.group(1)) if rate_match else 24000
+                if not 8000 <= rate <= 48000:
+                    raise RuntimeError("Invalid sample rate")
+                with io.BytesIO() as buffer:
+                    with wave.open(buffer, "wb") as recording:
+                        recording.setnchannels(1)
+                        recording.setsampwidth(2)
+                        recording.setframerate(rate)
+                        recording.writeframes(audio)
+                    audio = buffer.getvalue()
+            _audio_extension(audio)
+            return audio
+        except Exception as exc:
+            logger.warning("Native TTS unavailable (%s, code=%s); using Vietnamese fallback",
+                           type(exc).__name__, getattr(exc, "code", None))
+        finally:
+            await client.aio.aclose()
+    import edge_tts
+    engine_voice = "vi-VN-HoaiMyNeural" if voice == "Aoede" else "vi-VN-NamMinhNeural"
+    communicate = edge_tts.Communicate(phonetic_text, engine_voice)
+    chunks = []
+    async def collect():
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                chunks.append(chunk["data"])
     try:
-        import edge_tts
-        engine_voice = "vi-VN-HoaiMyNeural" if selected_voice == "Aoede" else "vi-VN-NamMinhNeural"
-        communicate = edge_tts.Communicate(phonetic_text, engine_voice)
-        await communicate.save(output_path)
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
-            with open(output_path, "rb") as f_out:
-                audio_bytes = f_out.read()
-                _memory_cache[hash_key] = audio_bytes
-            try:
-                with open(cache_path, "wb") as f_c:
-                    f_c.write(audio_bytes)
-            except Exception:
-                pass
-            dur = (time.time() - t_start) * 1000
-            logger.info(f"✅ [TTS-FALLBACK] Tổng hợp thành công ({dur:.1f}ms): {output_path}")
-            return output_path
-    except Exception as e:
-        logger.warning(f"Fallback synthesis error: {e}")
+        await asyncio.wait_for(collect(), timeout=12)
+    except Exception as error:
+        # Never log the provider URL or token / Không ghi URL chứa token vào log.
+        logger.warning("Vietnamese TTS unavailable (%s, status=%s)",
+                       type(error).__name__, getattr(error, "status", None))
+        raise RuntimeError("Dạ giọng đọc chưa sẵn sàng.") from None
+    audio = b"".join(chunks)
+    _audio_extension(audio)
+    return audio
 
-    # Đảm bảo luôn trả về file hợp lệ
-    if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
-        with open(output_path, "wb") as f:
-            f.write(b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\x00" * 1024)
-        with open(output_path, "rb") as f:
-            _memory_cache[hash_key] = f.read()
 
-    return output_path
+async def generate_private_speech(text: str, voice: str = "aoede") -> tuple[bytes, str]:
+    """No file/cache for conversations / Hội thoại chỉ xử lý trong RAM."""
+    if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+        raise ValueError("Nội dung giọng đọc chưa hợp lệ.")
+    if voice not in ("aoede", "charon"):
+        raise ValueError("Giọng đọc chưa hợp lệ.")
+    audio = await asyncio.wait_for(
+        _synthesize(sanitize_tts_text(text.strip()), VOICE_MAP[voice]), timeout=7)
+    extension = _audio_extension(audio)
+    return audio, "audio/wav" if extension == ".wav" else "audio/mpeg"
+
+
+async def generate_speech(text: str, output_path: Optional[str] = None,
+                          voice: Optional[str] = None, cache: bool = True) -> str:
+    """Return real audio with matching extension / Trả âm thanh thật và đúng định dạng."""
+    clean = text.strip() if isinstance(text, str) and text.strip() else "Dạ cháu lắng nghe Bác đây ạ."
+    if len(clean) > 8000:
+        raise ValueError("Nội dung giọng đọc quá dài.")
+    selected = VOICE_MAP.get(voice.lower(), DEFAULT_VOICE) if isinstance(voice, str) else DEFAULT_VOICE
+    phonetic = sanitize_tts_text(clean)
+    key = hashlib.md5(f"{phonetic}_{selected}".encode("utf-8")).hexdigest()
+    output_path = output_path or f"static/audio_{uuid.uuid4().hex}.mp3"
+    # Private conversation audio never enters persistent cache / Hội thoại không vào cache lâu dài.
+    if not cache:
+        return _write_audio(await _synthesize(phonetic, selected), output_path)
+    lock = _synthesis_locks.setdefault(key, asyncio.Lock())
+    try:
+        async with lock:
+            audio = _memory_cache.get(key)
+            if audio:
+                try:
+                    return _write_audio(audio, output_path)
+                except RuntimeError:
+                    _memory_cache.pop(key, None)
+            cache_path = _get_cache_path(phonetic, selected)
+            for extension in (".wav", ".mp3"):
+                candidate = os.path.splitext(cache_path)[0] + extension
+                if os.path.exists(candidate):
+                    with open(candidate, "rb") as source:
+                        audio = source.read()
+                    try:
+                        _audio_extension(audio)
+                    except RuntimeError:
+                        continue
+                    _remember(key, audio)
+                    return _write_audio(audio, output_path)
+            audio = await _synthesize(phonetic, selected)
+            _write_audio(audio, cache_path)
+            _remember(key, audio)
+            return _write_audio(audio, output_path)
+    finally:
+        if not lock.locked() and not getattr(lock, "_waiters", None):
+            _synthesis_locks.pop(key, None)
+
 
 async def warmup_common_prompts():
+    """Load cached guides without competing with memoirs for provider quota.
+    Chỉ nạp hướng dẫn có sẵn, không tranh hạn mức API với lời kể của Bác.
     """
-    Tiền tải toàn bộ kịch bản Master Voice Scripts vào RAM & Disk Cache khi khởi động.
-    """
-    logger.info("🔥 [WARMUP] Bắt đầu tiền tải kịch bản Master Voice Scripts vào RAM & Disk Cache...")
-    t_start = time.time()
-    count = 0
-    for key, script_text in MASTER_VOICE_SCRIPTS.items():
-        try:
-            for v_name in [DEFAULT_VOICE, FALLBACK_VOICE]:
-                cache_p = _get_cache_path(sanitize_tts_text(script_text), v_name)
-                hash_k = hashlib.md5(f"{sanitize_tts_text(script_text)}_{v_name}".encode("utf-8")).hexdigest()
-                
-                if os.path.exists(cache_p) and os.path.getsize(cache_p) > 500:
-                    with open(cache_p, "rb") as cf:
-                        _memory_cache[hash_k] = cf.read()
-                else:
-                    await generate_speech(script_text, cache_p, voice=v_name)
-                count += 1
-        except Exception as e:
-            logger.debug(f"Không thể tiền tải kịch bản [{key}]: {e}")
-            
-    dur = (time.time() - t_start) * 1000
-    logger.info(f"⚡ [WARMUP] Hoàn tất tiền tải {count} tệp âm thanh vào RAM & Disk Cache ({dur:.1f}ms)!")
+    for script in MASTER_VOICE_SCRIPTS.values():
+        for shortcut in ("aoede", "charon"):
+            try:
+                cache_path = _get_cache_path(sanitize_tts_text(script), VOICE_MAP[shortcut])
+                for extension in (".wav", ".mp3"):
+                    candidate = os.path.splitext(cache_path)[0] + extension
+                    if not os.path.exists(candidate):
+                        continue
+                    with open(candidate, "rb") as source:
+                        audio = source.read()
+                    _audio_extension(audio)
+                    phonetic = sanitize_tts_text(script)
+                    key = hashlib.md5(f"{phonetic}_{VOICE_MAP[shortcut]}".encode("utf-8")).hexdigest()
+                    _remember(key, audio)
+                    break
+            except Exception as exc:
+                logger.debug("Guide warmup skipped (%s)", type(exc).__name__)

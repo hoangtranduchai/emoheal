@@ -1,6 +1,8 @@
 services:
   - type: web
     name: emoheal-api
+    branch: feature/standalone-render-apk
+    region: singapore
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend

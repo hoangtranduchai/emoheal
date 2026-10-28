@@ -1,5 +1,4 @@
 import os
-import shutil
 import uuid
 import glob
 import time
@@ -10,15 +9,16 @@ from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, Depends, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 from dotenv import load_dotenv
 
-from logger_config import logger
-from services.ai_service import get_assistant_response, get_assistant_response_from_audio, transcribe_audio_with_gemini
-from services.tts_service import generate_speech, warmup_common_prompts
-from services.live_ai_service import handle_live_session, create_live_ephemeral_token
-from auth import get_current_user
-
 load_dotenv()
+
+from logger_config import logger
+from services.ai_service import AudioProcessingError, get_assistant_response, get_assistant_response_from_audio, transcribe_audio_with_gemini
+from services.tts_service import generate_speech, generate_private_speech, warmup_common_prompts, MASTER_VOICE_SCRIPTS
+from services.live_ai_service import handle_live_session, create_live_ephemeral_token, _sanitize_context
+from services.manual_companion import handle_manual_session
 
 from contextlib import asynccontextmanager
 
@@ -69,10 +69,7 @@ async def log_requests_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "unknown"
     method = request.method
     path = request.url.path
-    query = request.url.query
-
-    query_str = f"?{query}" if query else ""
-    logger.info(f"🌐 [IN] {method} {path}{query_str} từ {client_ip}")
+    logger.info(f"🌐 [IN] {method} {path} từ {client_ip}")
 
     try:
         response = await call_next(request)
@@ -91,7 +88,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Cleanup TTS files older than 1 hour / Dọn file TTS cũ hơn 1 giờ
 def _cleanup_old_tts(max_age_seconds: int = 3600):
     removed_count = 0
-    for f in glob.glob("static/resp_*.mp3"):
+    for f in glob.glob("static/resp_*.*") + glob.glob("static/tts_*.*"):
         try:
             if time.time() - os.path.getmtime(f) > max_age_seconds:
                 os.remove(f)
@@ -104,7 +101,7 @@ def _cleanup_old_tts(max_age_seconds: int = 3600):
 @app.get("/api/health")
 def health_check():
     logger.debug("Kiểm tra sức khỏe hệ thống (Health Check) -> OK")
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.0.0", "companion_protocol": 1}
 
 @app.websocket("/ws/live-assistant")
 async def live_assistant_ws(
@@ -136,24 +133,18 @@ async def live_assistant_ws(
             logger.debug(f"Không thể decode token trong WS query: {e}")
 
     async def send_to_client(data: dict):
-        try:
-            await websocket.send_json(data)
-        except Exception as e:
-            logger.debug(f"WS client send failed: {e}")
+        await websocket.send_json(data)
 
     async def receive_from_client() -> dict:
         try:
             return await websocket.receive_json()
         except WebSocketDisconnect:
             return {}
-        except Exception as e:
-            logger.debug(f"WS client receive failed: {e}")
-            return {}
 
     try:
         await handle_live_session(
-            send_to_client,
-            receive_from_client,
+            receive_from_client=receive_from_client,
+            send_to_client=send_to_client,
             display_name=display_name,
             voice=voice or "aoede",
             session_handle=session_handle
@@ -161,26 +152,49 @@ async def live_assistant_ws(
     except WebSocketDisconnect:
         logger.info("📡 [WS] Client đã ngắt kết nối WebSocket Live Assistant")
     except Exception as e:
-        logger.error(f"❌ [WS] Lỗi phiên WebSocket: {e}", exc_info=True)
+        logger.warning("Live websocket ended (%s)", type(e).__name__)
+    finally:
+        try:
+            await websocket.close()
+        except (RuntimeError, WebSocketDisconnect):
+            pass
+
+@app.websocket("/ws/companion-turns")
+async def companion_manual_ws(websocket: WebSocket, voice: str = "aoede"):
+    await websocket.accept()
+    try:
+        await handle_manual_session(websocket.receive_json, websocket.send_json,
+                                    voice if voice in ("aoede", "charon") else "aoede")
+    except WebSocketDisconnect:
+        pass
+    except Exception as error:
+        logger.warning("Manual companion closed (%s)", type(error).__name__)
+    finally:
+        try:
+            await websocket.close()
+        except (RuntimeError, WebSocketDisconnect):
+            pass
+
 
 @app.post("/api/live/token")
-async def get_live_ephemeral_token(expires_minutes: int = 30):
+async def get_live_ephemeral_token(expires_minutes: int = 30, voice: str = "aoede"):
     """
     Cấp phát Ephemeral Token ngắn hạn bảo mật cho Client kết nối trực tiếp Gemini Live API.
     """
     try:
-        res = create_live_ephemeral_token(user_id="anonymous")
+        if not 1 <= expires_minutes <= 30:
+            raise HTTPException(status_code=422, detail="Thời hạn cuộc gọi phải từ 1 đến 30 phút.")
+        res = create_live_ephemeral_token(user_id="anonymous", voice=voice, expires_minutes=expires_minutes)
         if asyncio.iscoroutine(res):
             res = await res
-        token_str = res.get("token", "") if isinstance(res, dict) else str(res)
-        return {
-            "token": token_str,
-            "expires_in_minutes": expires_minutes,
-            "model": "gemini-3.1-flash-live-preview"
-        }
+        if not isinstance(res, dict) or not res.get("token") or res.get("error"):
+            raise RuntimeError("Token unavailable")
+        return res
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Lỗi tạo ephemeral token: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("Live token unavailable (%s)", type(e).__name__)
+        raise HTTPException(status_code=503, detail="Dạ cuộc gọi chưa sẵn sàng, Bác thử lại sau nhé.")
 
 @app.post("/api/logs/client-error")
 async def report_client_error(payload: dict):
@@ -295,6 +309,27 @@ async def _verify_otp_from_supabase(phone: str, otp: str) -> bool:
             return record.get("otp") == otp
     return False
 
+AI_RESPONSE_TIMEOUT = 45
+
+
+async def _audio_result(function, *args, **kwargs):
+    """Bound the whole model stage / Giới hạn cả bước xử lý, kể cả fallback."""
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(function, *args, **kwargs), timeout=AI_RESPONSE_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail={
+            "code": "processing_timeout",
+            "message": "Cháu cần thêm thời gian nghe lại. Bản thu của Bác vẫn được giữ.",
+        }) from None
+    except AudioProcessingError as error:
+        raise HTTPException(status_code=503, detail={
+            "code": error.code,
+            "message": "Cháu chưa tạo được phụ đề. Bác có thể thử lại từ bản thu đã lưu.",
+        }) from None
+
+
 @app.post("/api/assistant")
 async def assistant_endpoint(
     request: Request,
@@ -302,11 +337,21 @@ async def assistant_endpoint(
     voice: Optional[str] = Form(None),
     history: Optional[str] = Form(None),
     audio: Optional[UploadFile] = File(None),
+    include_audio: bool = Form(True),
+    app_context: Optional[str] = Form(None),
 ):
     """
     Endpoint đa phương thức (Multimodal Ingress): Xử lý âm thanh giọng nói và văn bản bằng Gemini 3.7 Flash.
     Thực hiện phân tích cảm xúc (SER), trích xuất phụ đề (transcription), và tổng hợp giọng nói TTS tức thì.
     """
+    parsed_context = {}
+    if isinstance(app_context, str):
+        try:
+            if len(app_context) > 4000:
+                raise ValueError()
+            parsed_context = _sanitize_context(json.loads(app_context))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Trạng thái ứng dụng chưa hợp lệ.") from None
     parsed_history = []
     if history:
         try:
@@ -331,21 +376,27 @@ async def assistant_endpoint(
 
     response_data = {}
     if audio is not None:
-        audio_bytes = await audio.read()
+        audio_bytes = await audio.read(20 * 1024 * 1024 + 1)
+        if not audio_bytes or len(audio_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Bác gửi đoạn ghi âm ngắn hơn giúp cháu nhé.")
         mime_type = audio.content_type or "audio/m4a"
-        logger.info(f"🎙️ [API ASSISTANT] Nhận file ghi âm: {audio.filename} ({len(audio_bytes)/1024:.1f} KB, MIME: {mime_type})")
-        response_data = get_assistant_response_from_audio(
+        logger.info("Nhận yêu cầu trợ lý âm thanh (%d bytes)", len(audio_bytes))
+        response_data = await _audio_result(get_assistant_response_from_audio,
             audio_bytes,
             mime_type=mime_type,
             history=parsed_history,
-            display_name=display_name
+            display_name=display_name,
+            app_context=parsed_context,
         )
     elif text and text.strip():
-        logger.info(f"💬 [API ASSISTANT] Nhận tin nhắn văn bản từ {display_name}: \"{text}\"")
-        response_data = get_assistant_response(
+        if len(text) > 8000:
+            raise HTTPException(status_code=413, detail="Bác nói ngắn hơn giúp cháu nhé.")
+        logger.info("Nhận yêu cầu trợ lý dạng văn bản (%d ký tự)", len(text))
+        response_data = await _audio_result(get_assistant_response,
             text=text.strip(),
             history=parsed_history,
-            display_name=display_name
+            display_name=display_name,
+            app_context=parsed_context,
         )
     else:
         raise HTTPException(status_code=400, detail="Vui lòng cung cấp tệp âm thanh (audio) hoặc văn bản (text)")
@@ -353,14 +404,14 @@ async def assistant_endpoint(
     # Tự động tổng hợp giọng nói phản hồi của AI (TTS)
     ai_text = response_data.get("text", "")
     audio_url = None
-    if ai_text:
+    if ai_text and include_audio:
         try:
             _cleanup_old_tts()
             output_audio_path = f"static/resp_{uuid.uuid4().hex}.mp3"
-            await generate_speech(ai_text, output_audio_path, voice=voice)
-            audio_url = f"/{output_audio_path}"
+            actual_audio_path = await generate_speech(ai_text, output_audio_path, voice=voice, cache=False)
+            audio_url = f"/{actual_audio_path.replace(os.sep, '/')}"
         except Exception as tts_err:
-            logger.warning(f"Lỗi tạo TTS cho phản hồi trợ lý: {tts_err}")
+            logger.warning("Giọng đọc trợ lý chưa sẵn sàng (%s)", type(tts_err).__name__)
 
     response_data["audio_url"] = audio_url
     return response_data
@@ -375,6 +426,8 @@ async def assistant_text_endpoint(
     """
     Endpoint xử lý hội thoại văn bản thuần túy với Trợ lý AI.
     """
+    if not text.strip() or len(text) > 8000:
+        raise HTTPException(status_code=400, detail="Bác nhập một lời nhắn ngắn giúp cháu nhé.")
     parsed_history = []
     if history:
         try:
@@ -396,7 +449,7 @@ async def assistant_text_endpoint(
         except Exception:
             pass
 
-    response_data = get_assistant_response(
+    response_data = await _audio_result(get_assistant_response,
         text=text.strip(),
         history=parsed_history,
         display_name=display_name
@@ -408,8 +461,8 @@ async def assistant_text_endpoint(
         try:
             _cleanup_old_tts()
             output_audio_path = f"static/resp_{uuid.uuid4().hex}.mp3"
-            await generate_speech(ai_text, output_audio_path, voice=voice)
-            audio_url = f"/{output_audio_path}"
+            actual_audio_path = await generate_speech(ai_text, output_audio_path, voice=voice, cache=False)
+            audio_url = f"/{actual_audio_path.replace(os.sep, '/')}"
         except Exception as tts_err:
             logger.warning(f"Lỗi tạo TTS: {tts_err}")
 
@@ -423,10 +476,12 @@ async def transcribe_voice_memo_endpoint(
     """
     Endpoint nhận diện giọng nói tiếng Việt chuyên biệt cho Hồi ký (STT qua Gemini Multimodal).
     """
-    audio_bytes = await audio.read()
+    audio_bytes = await audio.read(20 * 1024 * 1024 + 1)
+    if not audio_bytes or len(audio_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Bác gửi đoạn ghi âm ngắn hơn giúp cháu nhé.")
     mime_type = audio.content_type or "audio/m4a"
     logger.info(f"📝 [TRANSCRIBE] Bắt đầu trích xuất phụ đề hồi ký ({len(audio_bytes)/1024:.1f} KB)")
-    transcript = transcribe_audio_with_gemini(audio_bytes, mime_type=mime_type)
+    transcript = await _audio_result(transcribe_audio_with_gemini, audio_bytes, mime_type=mime_type)
     return {
         "status": "ok",
         "transcription": transcript
@@ -440,14 +495,30 @@ async def text_to_speech(payload: dict):
     """
     text = payload.get("text", "")
     voice = payload.get("voice")
-    if not text:
+    if not isinstance(text, str) or not text.strip() or len(text) > 8000:
         raise HTTPException(status_code=400, detail="Vui lòng cung cấp văn bản (text)")
 
     _cleanup_old_tts()
     output_audio_path = f"static/tts_{uuid.uuid4().hex}.mp3"
-    await generate_speech(text, output_audio_path, voice=voice)
-    logger.info(f"🔊 Đã tạo audio hướng dẫn: {output_audio_path}")
-    return {"status": "ok", "audio_url": f"/{output_audio_path}"}
+    try:
+        actual_audio_path = await generate_speech(text, output_audio_path, voice=voice, cache=text in MASTER_VOICE_SCRIPTS.values())
+    except Exception:
+        raise HTTPException(status_code=503, detail="Dạ giọng đọc chưa sẵn sàng, Bác thử lại sau nhé.")
+    return {"status": "ok", "audio_url": f"/{actual_audio_path.replace(os.sep, '/')}"}
+
+
+@app.post("/api/companion/speech")
+async def companion_speech(payload: dict):
+    text, voice = payload.get("text"), payload.get("voice", "aoede")
+    if (not isinstance(text, str) or not text.strip() or len(text) > 2000
+            or voice not in ("aoede", "charon")):
+        raise HTTPException(status_code=400, detail="Nội dung hoặc giọng đọc chưa hợp lệ.")
+    try:
+        audio, media_type = await generate_private_speech(text, voice)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Giọng đọc tạm chưa dùng được.") from None
+    return Response(content=audio, media_type=media_type,
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 _registered_phones = set()
 

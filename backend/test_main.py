@@ -2,7 +2,7 @@ import pytest
 import os
 import json
 import asyncio
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 from fastapi.testclient import TestClient
 from main import app
 from services.tts_service import VOICE_MAP, DEFAULT_VOICE, sanitize_tts_text, generate_speech, _memory_cache
@@ -59,7 +59,9 @@ def test_ai_response_parsing(mock_client_cls):
     assert result["target"] == "breathing"
     assert "Bác ơi" in result["text"]
 
-def test_report_client_error():
+@patch("builtins.open", mock_open())
+@patch("main.os.makedirs")
+def test_report_client_error(mock_makedirs):
     """Test /api/logs/client-error endpoint for receiving phone logs."""
     payload = {
         "level": "[ERROR]",
@@ -106,7 +108,7 @@ def test_ai_response_malformed_fallback(mock_client_cls):
 
     result = get_assistant_response("Chào cháu")
     assert result["intent"] == "CHAT"
-    assert result["text"] == "Tôi là phản hồi plain text không có JSON"
+    assert result["text"] == "Dạ cháu chưa nghe rõ, Bác nói lại giúp cháu nhé."
     assert result["target"] is None
 
 def test_report_client_error_malformed_payload():
@@ -120,13 +122,17 @@ def test_report_client_error_malformed_payload():
 
 def test_tts_service_empty_text_sanitization():
     """Test TTS service when given empty or whitespace text."""
-    async def fake_save(dst):
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        with open(dst, "wb") as f:
-            f.write(b"a" * 1024)
-
-    path = asyncio.run(generate_speech("", output_path="static/test_empty.mp3"))
-    assert path == "static/test_empty.mp3"
+    import io, wave
+    with io.BytesIO() as audio:
+        with wave.open(audio, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(24000)
+            wav.writeframes(b"\x01\x00" * 100)
+        with patch("services.tts_service._synthesize", new=AsyncMock(return_value=audio.getvalue())) as synthesize:
+            path = asyncio.run(generate_speech("", output_path="static/test_empty.mp3"))
+    assert path == "static/test_empty.wav"
+    assert synthesize.call_args.args[0] == "Dạ cháu lắng nghe Bác đây ạ."
 
 def test_build_prompt_with_malformed_history():
     """Test prompt construction with non-list or invalid history objects."""
@@ -234,19 +240,27 @@ async def test_tts_ram_memory_cache():
     test_text = "Thử nghiệm bộ đệm RAM siêu tốc EmoHeal"
     phonetic = sanitize_tts_text(test_text)
     hash_key = hashlib.md5(f"{phonetic}_Aoede".encode("utf-8")).hexdigest()
-    _memory_cache[hash_key] = b"fake-audio-bytes-in-ram"
+    import io, wave
+    with io.BytesIO() as audio:
+        with wave.open(audio, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(24000)
+            wav.writeframes(b"\x01\x00" * 100)
+        valid_audio = audio.getvalue()
+    _memory_cache[hash_key] = valid_audio
     
     out_file = "static/test_ram_cache.mp3"
     result = await generate_speech(test_text, output_path=out_file, voice="aoede")
-    assert result == out_file
-    with open(out_file, "rb") as f:
-        assert f.read() == b"fake-audio-bytes-in-ram"
+    assert result == "static/test_ram_cache.wav"
+    with open(result, "rb") as f:
+        assert f.read() == valid_audio
 
 @patch("main.handle_live_session")
 def test_live_assistant_ws_endpoint(mock_handle_live):
     """Test /ws/live-assistant WebSocket endpoint connection and handshake."""
-    async def fake_handle(send_fn, recv_fn, display_name="Bác", voice="aoede", session_handle=None):
-        await send_fn({"type": "session_started", "model": "gemini-3.1-flash-live-preview"})
+    async def fake_handle(receive_from_client, send_to_client, display_name="Bác", voice="aoede", session_handle=None):
+        await send_to_client({"type": "session_started", "model": "gemini-3.1-flash-live-preview"})
     
     mock_handle_live.side_effect = fake_handle
     with client.websocket_connect("/ws/live-assistant?voice=charon") as ws:
@@ -257,21 +271,21 @@ def test_live_assistant_ws_endpoint(mock_handle_live):
 @patch("main.create_live_ephemeral_token")
 def test_get_live_ephemeral_token_endpoint(mock_create_token):
     """Test POST /api/live/token returns short-lived ephemeral token."""
-    mock_create_token.return_value = "auth_tokens/test-ephemeral-token-12345"
+    mock_create_token.return_value = {"token": "auth_tokens/test-ephemeral-token-12345", "expires_in_minutes": 30, "model": "gemini-3.8-live"}
     response = client.post("/api/live/token?expires_minutes=30")
     assert response.status_code == 200
     data = response.json()
     assert data["token"] == "auth_tokens/test-ephemeral-token-12345"
     assert data["expires_in_minutes"] == 30
-    assert data["model"] == "gemini-3.1-flash-live-preview"
+    assert data["model"] == "gemini-3.8-live"
 
 @patch("main.handle_live_session")
 def test_live_assistant_ws_session_resumption(mock_handle_live):
     """Test WebSocket accepts session_handle for resuming conversations."""
     resumed = []
-    async def fake_handle(send_fn, recv_fn, display_name="Bác", voice="aoede", session_handle=None):
+    async def fake_handle(receive_from_client, send_to_client, display_name="Bác", voice="aoede", session_handle=None):
         resumed.append(session_handle)
-        await send_fn({"type": "session_started", "model": "gemini-3.1-flash-live-preview", "resumed": True})
+        await send_to_client({"type": "session_started", "model": "gemini-3.1-flash-live-preview", "resumed": True})
     
     mock_handle_live.side_effect = fake_handle
     with client.websocket_connect("/ws/live-assistant?session_handle=test_resumption_token_abc") as ws:
