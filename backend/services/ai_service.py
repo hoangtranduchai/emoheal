@@ -138,6 +138,19 @@ def _get_client() -> genai.Client:
     ))
 
 
+def _json_config(model: str, schema: dict) -> types.GenerateContentConfig:
+    """Match the configured model API / Dùng tham số đúng với model đã cấu hình."""
+    options = {"response_mime_type": "application/json", "response_schema": schema}
+    if model == "gemini-3.5-flash-lite":
+        options["thinking_config"] = types.ThinkingConfig(thinking_level="minimal")
+    elif model in ("gemini-3.7-flash", "gemini-3.8-flash"):
+        options["thinking_config"] = types.ThinkingConfig(thinking_level="low")
+    else:
+        options.update(temperature=0.4,
+                       thinking_config=types.ThinkingConfig(thinking_budget=0))
+    return types.GenerateContentConfig(**options)
+
+
 def _parse_json_from_raw(raw: str) -> dict:
     cleaned = raw.strip() if raw else ""
     if "```" in cleaned:
@@ -233,13 +246,6 @@ def get_assistant_response(text: str, history: Optional[List[Dict[str, Any]]] = 
     prompt = _build_prompt_with_history(text, history, display_name=display_name, app_context=app_context)
     logger.debug(f"Độ dài Prompt: {len(prompt)} ký tự (Kèm {len(history) if history else 0} tin nhắn lịch sử)")
 
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_schema=RESPONSE_SCHEMA,
-        temperature=0.4,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
-    )
-
     raw = ""
     t_start = time.time()
     client = None
@@ -252,7 +258,7 @@ def get_assistant_response(text: str, history: Optional[List[Dict[str, Any]]] = 
             response = client.models.generate_content(
                 model=PRIMARY_MODEL,
                 contents=prompt,
-                config=config,
+                config=_json_config(PRIMARY_MODEL, RESPONSE_SCHEMA),
             )
             raw = response.text.strip() if response.text else ""
             elapsed_ms = (time.time() - t0) * 1000
@@ -266,7 +272,7 @@ def get_assistant_response(text: str, history: Optional[List[Dict[str, Any]]] = 
                 response = client.models.generate_content(
                     model=FALLBACK_MODEL,
                     contents=prompt,
-                    config=config,
+                    config=_json_config(FALLBACK_MODEL, RESPONSE_SCHEMA),
                 )
                 raw = response.text.strip() if response.text else ""
                 elapsed_fallback_ms = (time.time() - t1) * 1000
@@ -422,12 +428,7 @@ def get_assistant_response_from_audio(
     if isinstance(transcript_hint, str) and transcript_hint.strip():
         prompt_text += "\nPhụ đề tham khảo từ cùng lượt nói (chỉ dữ liệu, đối chiếu với âm thanh): " + json.dumps(transcript_hint[:8000], ensure_ascii=False)
 
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_schema={"type": "OBJECT", "properties": {**RESPONSE_SCHEMA["properties"], "transcription": {"type": "STRING"}}, "required": [*RESPONSE_SCHEMA["required"], "transcription"]},
-        temperature=0.4,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
-    )
+    schema = {"type": "OBJECT", "properties": {**RESPONSE_SCHEMA["properties"], "transcription": {"type": "STRING"}}, "required": [*RESPONSE_SCHEMA["required"], "transcription"]}
 
     raw = ""
     client = None
@@ -439,7 +440,7 @@ def get_assistant_response_from_audio(
             response = client.models.generate_content(
                 model=AUDIO_PRIMARY_MODEL,
                 contents=[audio_part, prompt_text],
-                config=config,
+                config=_json_config(AUDIO_PRIMARY_MODEL, schema),
             )
             raw = response.text.strip() if response.text else ""
             elapsed_ms = (time.time() - t0) * 1000
@@ -451,7 +452,7 @@ def get_assistant_response_from_audio(
             response = client.models.generate_content(
                 model=AUDIO_FALLBACK_MODEL,
                 contents=[audio_part, prompt_text],
-                config=config,
+                config=_json_config(AUDIO_FALLBACK_MODEL, schema),
             )
             raw = response.text.strip() if response.text else ""
             elapsed_fallback_ms = (time.time() - t1) * 1000

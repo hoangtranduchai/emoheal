@@ -76,7 +76,24 @@ def test_model_timeout_falls_back_once_and_preserves_user_role(monkeypatch):
     calls = provider.models.generate_content.call_args_list
     assert [call.kwargs["model"] for call in calls] == [ai_service.AUDIO_PRIMARY_MODEL, ai_service.AUDIO_FALLBACK_MODEL]
     assert "Bác: Bác chào cháu" in calls[1].kwargs["contents"][1]
+    assert calls[1].kwargs["config"].thinking_config.thinking_level == "LOW"
+    assert calls[1].kwargs["config"].temperature is None
     provider.close.assert_called_once()
+
+
+def test_approved_lite_model_keeps_full_memo_schema(monkeypatch):
+    provider = MagicMock()
+    provider.models.generate_content.return_value.text = json.dumps(audio_result(), ensure_ascii=False)
+    monkeypatch.setattr(ai_service, "_get_client", lambda: provider)
+    monkeypatch.setattr(ai_service, "AUDIO_PRIMARY_MODEL", "gemini-3.5-flash-lite")
+    result = ai_service.get_assistant_response_from_audio(b"audio", "audio/wav")
+    assert result["transcription"] == "Bác nhớ đồng đội."
+    config = provider.models.generate_content.call_args.kwargs["config"]
+    assert config.thinking_config.thinking_level == "MINIMAL"
+    assert config.thinking_config.thinking_budget is None
+    assert config.temperature is None
+    assert set(config.response_schema["required"]) == {
+        *ai_service.RESPONSE_SCHEMA["required"], "transcription"}
 
 
 @pytest.mark.parametrize("result", ["invalid json", '{}', '{"transcription":42}'])
